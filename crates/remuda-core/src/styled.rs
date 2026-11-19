@@ -28,14 +28,15 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     let st = core.lock();
     let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
     let full_screen = screen.alt_screen();
-    let Some((rows, kept, cut)) = fit(screen.styled_screen(), screen.styled_history().take(lines.min(HISTORY)), BUDGET)
-    else {
+    let history = screen.styled_history();
+    let capped = lines.min(history.len()) > HISTORY;
+    let Some((rows, kept, cut)) = fit(screen.styled_screen(), history.take(lines.min(HISTORY)), BUDGET) else {
         let hint = "read it as plain text (no format)";
         return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
     };
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
     let shown = screen.size().1 as usize;
-    let lost = cut || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
+    let lost = cut || capped || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
     let how = if lines == 0 || full_screen { "screen" } else { "history" };
     let complete = t.screen == "exact" && !lost;
     Some(Ok(ReadResult { text: rows.join("\n"), complete, how: how.into(), why: None }))

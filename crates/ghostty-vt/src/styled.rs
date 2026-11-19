@@ -73,7 +73,7 @@ impl Terminal {
 
     /// Scrollback rows like `styled_screen`'s, the newest first, read as taken
     /// (main screen only: none on the alternate screen).
-    pub fn styled_history(&self) -> impl Iterator<Item = String> + '_ {
+    pub fn styled_history(&self) -> impl ExactSizeIterator<Item = String> + '_ {
         let cols = self.size().0;
         let available = if self.alt_screen() { 0 } else { self.history_rows() };
         (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
