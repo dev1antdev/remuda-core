@@ -54,21 +54,19 @@ fn fit(
     if used > budget {
         return None;
     }
-    let mut rows = Vec::new();
+    let (mut rows, mut cut) = (Vec::new(), false);
     for row in newest_first {
         used += json(&row);
         if used > budget {
-            let kept = rows.len();
-            rows.reverse();
-            rows.extend(screen);
-            return Some((rows, kept, true));
+            cut = true;
+            break;
         }
         rows.push(row);
     }
     let kept = rows.len();
     rows.reverse();
     rows.extend(screen);
-    Some((rows, kept, false))
+    Some((rows, kept, cut))
 }
 
 /// `rc read`'s output: the terminal's `text` and the notes after it. For vt the
