@@ -191,3 +191,31 @@ fn an_output_watch_hears_a_command_that_prints_and_exits_at_once() {
     let event = next_event(&mut events, |m| m["params"]["type"] == "output");
     assert_eq!(event["params"]["data"], json!({"watch": "fail", "line": "last words FAIL", "fresh": false}));
 }
+
+#[test]
+fn an_output_watch_outlives_a_kept_terminal_restarting() {
+    let s = session("0");
+    // It prints and dies by a signal at once: the look after it finds the terminal between shells.
+    let program = "stty -echo; echo 'one FAIL'; read x; echo 'gone FAIL'; kill -9 $$";
+    let t = s.json(&["run", "--bg", "--keep", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).contains("one FAIL"));
+    let mut events = s.connect();
+    let watch = json!([{"id": "fail", "terminal": t, "match": {"type": "regex", "value": "^(one|gone|two) FAIL$"}}]);
+    events.call(1, "events.subscribe", json!({"output": watch}));
+    let line = |events: &mut common::Conn| {
+        next_event(events, |m| m["params"]["type"] == "output")["params"]["data"]["line"].as_str().unwrap().to_string()
+    };
+    assert_eq!(line(&mut events), "one FAIL");
+    let old = get(&s, &t)["pid"].as_i64().unwrap();
+    s.json(&["send", &t, "go"]);
+    wait_until("replacement shell", || {
+        let r = get(&s, &t);
+        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
+    });
+    s.json(&["send", &t, "printf 'two FAIL\\n'"]);
+    let mut heard = line(&mut events);
+    if heard == "gone FAIL" {
+        heard = line(&mut events);
+    }
+    assert_eq!(heard, "two FAIL");
+}

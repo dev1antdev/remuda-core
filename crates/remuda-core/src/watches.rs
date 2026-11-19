@@ -8,7 +8,7 @@ use crate::runtime::Core;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -22,6 +22,9 @@ const EVERY: Duration = Duration::from_millis(250);
 /// What one look sends at most, well inside a subscriber's queue; the rest waits for the next.
 const EVENTS_PER_LOOK: usize = 256;
 const BYTES_PER_LOOK: usize = 1 << 20;
+/// Rows a watch keeps waiting to be told, past which the oldest go (and are told as lost).
+const MAX_PENDING: usize = 1000;
+const MAX_PENDING_BYTES: usize = 64 << 10;
 
 /// A watch on a terminal's last rows.
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -57,13 +60,15 @@ pub struct Watch {
     terminal: u32,
     lines: usize,
     find: Find,
-    /// The matching rows told and still standing, each with how many times it stands.
+    /// The matching rows standing at the last look, each with how many times it stands.
     seen: HashMap<String, usize>,
-    /// Its rows told now are the ones already there when it began.
-    fresh: bool,
-    /// Matches it could not tell in its last look: look again whether or not it printed.
-    behind: bool,
-    /// Its terminal finished and its last screen was looked at.
+    /// Rows seen and not told yet, each with whether it stood there when the watch began.
+    pending: VecDeque<(String, bool)>,
+    pending_bytes: usize,
+    /// Rows dropped from a full `pending`, to tell as such.
+    lost: usize,
+    looked: bool,
+    /// Its terminal finished (or went) and what it left was looked at.
     done: bool,
 }
 
@@ -127,8 +132,10 @@ fn compile_one(
         lines: w.lines,
         find,
         seen: HashMap::new(),
-        fresh: true,
-        behind: false,
+        pending: VecDeque::new(),
+        pending_bytes: 0,
+        lost: 0,
+        looked: false,
         done: false,
     })
 }
@@ -140,9 +147,9 @@ pub fn start(core: Arc<Core>, sink: Sink, filter: Filter, mut watches: Vec<Watch
     }
     tokio::spawn(async move {
         let mut printed: HashMap<u32, u64> = HashMap::new();
-        let mut first = true;
-        while look(&core, &sink, &filter, &mut watches, &mut printed, first) {
-            first = false;
+        let mut turn = 0;
+        while look(&core, &sink, &filter, &mut watches, &mut printed, turn) {
+            turn += 1;
             tokio::time::sleep(EVERY).await;
         }
     });
@@ -165,14 +172,16 @@ impl Budget {
     }
 }
 
-/// One look at the terminals that printed since the last; false once the subscription is gone.
+/// One look: the terminals that printed since the last are read, then each
+/// watch's waiting rows are told in turn as far as one look goes. False once
+/// the subscription is gone.
 fn look(
     core: &Core,
     sink: &Sink,
     filter: &Filter,
     watches: &mut [Watch],
     printed: &mut HashMap<u32, u64>,
-    first: bool,
+    turn: usize,
 ) -> bool {
     let mut st = core.lock();
     let alive = match sink {
@@ -191,20 +200,16 @@ fn look(
             printed.insert(*id, now) != Some(now)
         })
         .collect();
-    let mut rows: HashMap<(u32, usize), Vec<String>> = HashMap::new();
-    let mut budget = Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK };
-    let mut events = Vec::new();
-    for w in watches.iter_mut().filter(|w| !w.done && (first || w.behind || moved.contains(&w.terminal))) {
-        let lines = match rows.get(&(w.terminal, w.lines)) {
-            Some(lines) => lines,
-            None => {
-                let Some(lines) = recent(core, &st, w) else { continue };
-                rows.entry((w.terminal, w.lines)).or_insert(lines)
-            }
-        };
-        tell(w, lines, &mut budget, &mut events);
-        w.done = !w.behind && !st.screens.contains_key(&w.terminal);
+    let mut rows: HashMap<(u32, usize), Option<Vec<String>>> = HashMap::new();
+    for w in watches.iter_mut().filter(|w| !w.done && (!w.looked || moved.contains(&w.terminal))) {
+        if let Some(lines) = rows.entry((w.terminal, w.lines)).or_insert_with(|| recent(core, &st, w)) {
+            observe(w, lines);
+        }
+        if !st.screens.contains_key(&w.terminal) {
+            w.done = st.reg.terminals.get(&w.terminal).is_none_or(|t| !t.is_live());
+        }
     }
+    let events = tell(watches, turn, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
     for mut params in events {
         st.events.seq += 1;
         params["seq"] = st.events.seq.into();
@@ -231,7 +236,7 @@ fn look(
     true
 }
 
-/// A watch's last rows: the live screen's, or once it finished, those of the screen it left.
+/// A watch's last rows: the live screen's, or while it has none, those of the screen it left.
 fn recent(core: &Core, st: &crate::runtime::State, w: &Watch) -> Option<Vec<String>> {
     if let Some(screen) = st.screens.get(&w.terminal) {
         return Some(screen.recent_rows(w.lines));
@@ -241,24 +246,60 @@ fn recent(core: &Core, st: &crate::runtime::State, w: &Watch) -> Option<Vec<Stri
     Some(ghostty_vt::Terminal::restore(&saved, core.history_bytes())?.recent_rows(w.lines))
 }
 
-/// Events for the matching lines not told yet, in their order, as far as `budget` goes.
-fn tell(w: &mut Watch, lines: &[String], budget: &mut Budget, events: &mut Vec<Value>) {
+/// Queues the matching lines that came into view since the last look, in their order.
+fn observe(w: &mut Watch, lines: &[String]) {
+    let fresh = !w.looked;
     let mut standing: HashMap<String, usize> = HashMap::new();
-    w.behind = false;
     for line in lines.iter().filter(|l| w.find.matches(l)) {
-        let told = standing.entry(line.clone()).or_default();
-        if *told < w.seen.get(line).copied().unwrap_or_default() {
-            *told += 1;
-        } else if !w.behind && budget.take(w.id.len() + line.len() + 128) {
-            *told += 1;
-            events.push(json!({"type": "output", "terminal": crate::terminals::address(w.terminal),
-                "data": {"watch": w.id, "line": line, "fresh": w.fresh}}));
-        } else {
-            w.behind = true;
+        let count = standing.entry(line.clone()).or_default();
+        *count += 1;
+        if *count > w.seen.get(line).copied().unwrap_or_default() {
+            w.pending_bytes += line.len();
+            w.pending.push_back((line.clone(), fresh));
         }
     }
+    while w.pending.len() > MAX_PENDING || w.pending_bytes > MAX_PENDING_BYTES {
+        let (gone, _) = w.pending.pop_front().expect("over a limit, so not empty");
+        w.pending_bytes -= gone.len();
+        w.lost += 1;
+    }
     w.seen = standing;
-    w.fresh &= w.behind;
+    w.looked = true;
+}
+
+/// Each watch's waiting rows in turn, one at a time from each, starting further
+/// along at every look, until they are told or `budget` is spent.
+fn tell(watches: &mut [Watch], turn: usize, budget: &mut Budget) -> Vec<Value> {
+    let mut events = Vec::new();
+    let count = watches.len();
+    loop {
+        let mut told = false;
+        for k in 0..count {
+            let w = &mut watches[(turn + k) % count];
+            let address = crate::terminals::address(w.terminal);
+            let event = if w.lost > 0 {
+                json!({"type": "output", "terminal": address, "data": {"watch": w.id, "lost": w.lost}})
+            } else if let Some((line, fresh)) = w.pending.front() {
+                json!({"type": "output", "terminal": address, "data": {"watch": w.id, "line": line, "fresh": fresh}})
+            } else {
+                continue;
+            };
+            let size = w.id.len() + w.pending.front().map_or(0, |(line, _)| line.len()) + 128;
+            if !budget.take(size) {
+                return events;
+            }
+            if w.lost > 0 {
+                w.lost = 0;
+            } else if let Some((line, _)) = w.pending.pop_front() {
+                w.pending_bytes -= line.len();
+            }
+            events.push(event);
+            told = true;
+        }
+        if !told {
+            return events;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -292,23 +333,51 @@ mod tests {
         assert_eq!(refused(&[here]), None, "this core's own name is for resolve to read");
     }
 
+    fn fail_watch() -> Watch {
+        compile(&[watch(OutputMatch::Substring("FAIL".into()), 40)], |_| Ok(1), |_| false).unwrap().remove(0)
+    }
+
+    fn lines(rows: &[&str]) -> Vec<String> {
+        rows.iter().map(|r| r.to_string()).collect()
+    }
+
+    fn told(events: &[Value]) -> Vec<(Value, Value)> {
+        events.iter().map(|e| (e["data"]["line"].clone(), e["data"]["fresh"].clone())).collect()
+    }
+
     #[test]
-    fn a_look_tells_what_its_budget_holds_and_the_next_one_the_rest() {
-        let mut w =
-            compile(&[watch(OutputMatch::Substring("FAIL".into()), 40)], |_| Ok(1), |_| false).unwrap().remove(0);
-        let lines: Vec<String> = ["a FAIL", "ok", "b FAIL", "a FAIL"].map(String::from).into();
-        let told = |events: &[Value]| {
-            events.iter().map(|e| (e["data"]["line"].clone(), e["data"]["fresh"].clone())).collect::<Vec<_>>()
-        };
-        let mut events = Vec::new();
-        tell(&mut w, &lines, &mut Budget { events: 2, bytes: 1 << 20 }, &mut events);
-        assert_eq!(told(&events), [(json!("a FAIL"), json!(true)), (json!("b FAIL"), json!(true))], "in their order");
-        assert!(w.behind);
-        events.clear();
-        tell(&mut w, &lines, &mut Budget { events: 9, bytes: 1 << 20 }, &mut events);
-        assert_eq!(told(&events), [(json!("a FAIL"), json!(true))], "the second a FAIL, still one of the first rows");
-        events.clear();
-        tell(&mut w, &lines, &mut Budget { events: 9, bytes: 1 << 20 }, &mut events);
-        assert!(events.is_empty() && !w.behind && !w.fresh, "rows that stand are not told again");
+    fn rows_wait_their_turn_and_keep_whether_they_were_there_at_the_start() {
+        let mut w = [fail_watch()];
+        observe(&mut w[0], &lines(&["a FAIL", "ok", "b FAIL", "a FAIL"]));
+        let first = tell(&mut w, 0, &mut Budget { events: 2, bytes: 1 << 20 });
+        assert_eq!(told(&first), [(json!("a FAIL"), json!(true)), (json!("b FAIL"), json!(true))], "in their order");
+        observe(&mut w[0], &lines(&["a FAIL", "b FAIL", "a FAIL", "c FAIL"]));
+        let next = tell(&mut w, 1, &mut Budget { events: 9, bytes: 1 << 20 });
+        assert_eq!(told(&next), [(json!("a FAIL"), json!(true)), (json!("c FAIL"), json!(false))]);
+        observe(&mut w[0], &lines(&["a FAIL", "b FAIL", "a FAIL", "c FAIL"]));
+        assert!(
+            tell(&mut w, 2, &mut Budget { events: 9, bytes: 1 << 20 }).is_empty(),
+            "standing rows are not told again"
+        );
+    }
+
+    #[test]
+    fn a_busy_watch_leaves_room_for_a_quiet_one() {
+        let mut ws = [fail_watch(), fail_watch()];
+        let busy: Vec<String> = (0..200).map(|n| format!("{n} FAIL")).collect();
+        observe(&mut ws[0], &busy);
+        observe(&mut ws[1], &lines(&["server FAIL"]));
+        let events = tell(&mut ws, 0, &mut Budget { events: 3, bytes: 1 << 20 });
+        assert!(told(&events).contains(&(json!("server FAIL"), json!(true))), "{events:?}");
+    }
+
+    #[test]
+    fn rows_past_what_a_watch_keeps_are_told_as_lost() {
+        let mut w = [fail_watch()];
+        let flood: Vec<String> = (0..MAX_PENDING + 5).map(|n| format!("{n} FAIL")).collect();
+        observe(&mut w[0], &flood);
+        let events = tell(&mut w, 0, &mut Budget { events: 2, bytes: 1 << 20 });
+        assert_eq!(events[0]["data"]["lost"], 5);
+        assert_eq!(events[1]["data"]["line"], "5 FAIL", "the oldest went");
     }
 }
