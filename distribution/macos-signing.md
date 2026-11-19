@@ -1,5 +1,8 @@
 # macOS release signing and notarization
 
+This describes upstream's disabled `release.yml`. Our releases are signed ad-hoc, with no
+secrets and no notarization (REMUDA.md).
+
 In remuda-core's GitHub **release** environment, add these secrets with the
 **same values as herdr-app's release environment**:
 

@@ -84,7 +84,7 @@ State is not encrypted by core. Removing state is destructive, not a way to stop
 
 ```sh
 rc update
-rc update --version 0.1.5
+rc update --version 0.2.1
 ```
 
 The version form means at least that version, not an exact downgrade.
@@ -107,3 +107,4 @@ An ad-hoc signature changes with every build, so macOS asks again for the privac
 Once rc runs from the bundle, an update will not replace it with a bare executable.
 As root or outside your home folder, they install the plain `remuda-core` executable, checked only by its SHA-256.
 With another `RC_RELEASES_URL`, or `rc update --from` a bundle, that service or file is trusted as it is, under the same check.
+The identifier check catches a damaged or wrong bundle, not a forged one: anyone can sign ad-hoc with that identifier, and only GitHub and HTTPS stand behind the download.

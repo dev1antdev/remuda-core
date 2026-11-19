@@ -96,11 +96,6 @@ if [ "$bundle" = 1 ] && [ -x "$tmp/remuda core.app/Contents/MacOS/remuda-core" ]
       for (i=1; i<=3; i++) { if (a[i]+0 > b[i]+0) exit 1; if (a[i]+0 < b[i]+0) exit 0 }
     }' || fail "$candidate is older than $installed; use rc update --from with --force to downgrade"
   fi
-  case "$releases" in
-    https://github.com/dev1antdev/remuda-core/releases | https://github.com/dev1antdev/remuda-core/releases/)
-      # Our releases are signed ad-hoc (REMUDA.md): the identifier is what there is to check.
-      /usr/bin/codesign --verify --strict -R '=identifier "dev.mardeus.remuda-core"' "$tmp/remuda core.app" || fail "not a remuda-core release" ;;
-  esac
   "$bundled" --rc-install-bundle "$bundled" "$bin/remuda-core" || fail "installing remuda core.app failed"
   # A fresh install must not start a core (especially not a system/root core).
   if [ "$action" = updated ]; then
