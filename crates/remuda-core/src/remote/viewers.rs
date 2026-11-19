@@ -29,7 +29,7 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
     for ((key, here), r) in waiting {
         if let Some(refused) = super::remuda::keep_size_refused(&line, &m, &r.params) {
             core.lock().relayed.remove(&(key, here));
-            r.conn.with(|out| out.close(here, &super::remuda::too_old(&refused)));
+            r.conn.with(|out| out.finish(here, &super::remuda::too_old(&refused)));
             continue;
         }
         // The screen is painted again; the viewer already has its history.
@@ -50,7 +50,7 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
             && e.kind == "needs_update"
         {
             st.relayed.remove(&(key, here));
-            r.conn.with(|out| out.close(here, &super::remuda::too_old(e)));
+            r.conn.with(|out| out.finish(here, &super::remuda::too_old(e)));
             continue;
         }
         let reply = reply.ok();

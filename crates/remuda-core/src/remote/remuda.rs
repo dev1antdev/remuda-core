@@ -59,8 +59,14 @@ mod tests {
                 keeps_running_after_logout: None,
                 logout_linger_user: None,
             };
+            // A slow viewer: out of credit, with output still queued.
             let conn = Arc::new(Conn::default());
-            conn.with(|out| out.open(7));
+            conn.with(|out| {
+                out.open(7);
+                out.data(7, &vec![b'x'; wire::WINDOW]);
+                while out.next_frame().is_some() {}
+                out.data(7, b"kept");
+            });
             let (old_frames, _old_rx) = mpsc::unbounded_channel();
             core.lock().relayed.insert(
                 (conn_key(&conn), 7),
@@ -97,6 +103,9 @@ mod tests {
             let relayed = core.lock().relayed.contains_key(&(conn_key(&conn), 7));
             assert_eq!(relayed, path == Path::Supported);
             if path != Path::Supported {
+                conn.with(|out| out.credit(7, wire::WINDOW));
+                let kept = conn.outbox().next_frame().unwrap();
+                assert_eq!((kept[4], &kept[wire::HEADER..]), (wire::DATA, b"kept".as_slice()), "queued output first");
                 let close = conn.outbox().next_frame().unwrap();
                 assert_eq!(close[4], wire::CLOSE);
                 let reason: Value = serde_json::from_slice(&close[wire::HEADER..]).unwrap();
