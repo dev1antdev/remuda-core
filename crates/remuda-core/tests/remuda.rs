@@ -137,3 +137,42 @@ fn read_in_vt_says_when_it_stopped_at_its_history_cap() {
     let rows = r["text"].as_str().unwrap().split('\n').count();
     assert_eq!((rows, r["complete"].as_bool()), (1000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, Some(false)));
 }
+
+#[test]
+fn output_watches_tell_of_each_matching_row_as_it_comes() {
+    let s = session("0");
+    let program = "stty -echo; echo 'standing FAIL'; while read line; do echo \"got $line\"; done";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("standing", || text(&s, &t).contains("standing FAIL"));
+    let mut events = s.connect();
+    let watches = json!([
+        {"id": "fail", "terminal": t, "match": {"type": "substring", "value": "FAIL"}},
+        {"id": "count", "terminal": t, "match": {"type": "regex", "value": r"^got \d+$"}, "lines": 10},
+    ]);
+    assert!(events.call(1, "events.subscribe", json!({"output": watches}))["result"]["seq"].is_u64());
+    let output = |events: &mut common::Conn| {
+        let event = next_event(events, |m| m["params"]["type"] == "output");
+        let data = &event["params"]["data"];
+        assert_ne!(
+            (data["line"].as_str(), data["fresh"].as_bool()),
+            (Some("standing FAIL"), Some(false)),
+            "told twice"
+        );
+        (data["watch"].as_str().unwrap().to_string(), data["line"].as_str().unwrap().to_string(), data["fresh"] == true)
+    };
+    assert_eq!(output(&mut events), ("fail".into(), "standing FAIL".into(), true), "already on the screen");
+    s.json(&["send", &t, "x FAIL"]);
+    assert_eq!(output(&mut events), ("fail".into(), "got x FAIL".into(), false));
+    s.json(&["send", &t, "٣"]);
+    assert_eq!(output(&mut events), ("count".into(), "got ٣".into(), false), "a Unicode digit");
+    s.json(&["send", &t, "x FAIL"]);
+    assert_eq!(output(&mut events), ("fail".into(), "got x FAIL".into(), false), "the same text, again");
+
+    let refused = s.connect().call(
+        1,
+        "events.subscribe",
+        json!({"output": [{"id": "bad", "terminal": t, "match": {"type": "regex", "value": "("}}]}),
+    );
+    assert_eq!(refused["error"]["data"]["kind"], "invalid_regex", "{refused}");
+    assert!(refused["error"]["message"].as_str().unwrap().contains("\"bad\""));
+}

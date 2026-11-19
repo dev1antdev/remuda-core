@@ -464,6 +464,11 @@ pub struct SubscribeParams {
     #[serde(default, with = "label_map")]
     #[schemars(with = "BTreeMap<String, String>")]
     pub labels: Vec<Label>,
+    /// Watches on terminals here: each row that comes into a watch's last rows
+    /// matching it is an `output` event (`fresh` for the rows already there).
+    #[arg(skip)]
+    #[serde(default)]
+    pub output: Vec<crate::watches::OutputWatch>,
 }
 
 #[derive(Serialize, JsonSchema)]

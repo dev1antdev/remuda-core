@@ -23,6 +23,7 @@ pub const FEATURES: &[&str] = &[
     "automatic_input",
     "restart_environment",
     "keep_size",
+    "output_watches",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
@@ -138,8 +139,8 @@ methods! { Ctx<'_>;
         "Write an opaque JSON document (at most 1 MiB) if its version still matches. Null deletes the value but retains its version. Persists atomically and emits a doc event.",
         errors ["invalid_params", "conflict", "internal", "machine_unknown", "unavailable", "needs_update"];
     "events.subscribe" => events_subscribe, SubscribeParams => SubscribeResult,
-        "Snapshot of matching terminals, then every fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind.",
-        errors ["not_found", "machine_unknown"];
+        "Snapshot of matching terminals, then every fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc, and output for `output` watches) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind.",
+        errors ["not_found", "machine_unknown", "invalid_params", "invalid_regex"];
     "machine.add" => machine_add, MachineAddParams => crate::machines::Machine,
         "Add another machine: dial it over ssh, check that rc answers there, and keep it under a name.",
         errors ["invalid_params", "name_taken", "already_added", "unreachable", "rc_missing", "incompatible"];
@@ -600,6 +601,7 @@ async fn events_subscribe(core: Ctx<'_>, p: SubscribeParams) -> Result<Subscribe
     let terminal = p.terminal.as_deref().map(address).transpose()?;
     let children_of = p.children_of.as_deref().map(address).transpose()?;
     let filter = Filter { terminal, children_of, labels: labels(&p.labels), here_only: from_afar(core) };
+    let watches = crate::watches::compile(&p.output, |t| resolve(core, t))?;
     let (sink, channel) = match (core.conn, core.plain) {
         (Some(conn), _) => {
             let channel = conn.new_channel();
@@ -615,12 +617,16 @@ async fn events_subscribe(core: Ctx<'_>, p: SubscribeParams) -> Result<Subscribe
         }
         (None, None) => return Err(RpcError::internal("no connection to deliver events on")),
     };
+    let reach = crate::watches::Reach::of(&sink, &filter);
     let (seq, terminals) = {
         let mut st = core.lock();
         let terminals = core.matching(&st, &filter);
         core.subscribe(&mut st, filter, sink);
         (st.events.seq, terminals)
     };
+    if let Some(reach) = reach {
+        crate::watches::start(core.core.clone(), reach, watches);
+    }
     if let Some(channel) = channel {
         crate::server::heartbeat(core.core.clone(), core.conn.expect("framed").clone(), channel);
     }

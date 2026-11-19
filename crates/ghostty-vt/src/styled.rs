@@ -79,6 +79,32 @@ impl Terminal {
         (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
     }
 
+    /// The last `n` rows as plain text, oldest first, trailing spaces cut: the
+    /// screen down to its last row with text, then history above it (main screen only).
+    pub fn recent_rows(&self, n: usize) -> Vec<String> {
+        let mut screen: Vec<String> = self.screen_rows().iter().map(|r| r.trim_end().to_string()).collect();
+        while screen.last().is_some_and(String::is_empty) {
+            screen.pop();
+        }
+        let available = if self.alt_screen() { 0 } else { self.history_rows() };
+        let wanted = u32::try_from(n.saturating_sub(screen.len())).unwrap_or(u32::MAX).min(available);
+        let last = self.size().0.saturating_sub(1);
+        let history = (wanted > 0)
+            .then(|| self.select(ffi::POINT_HISTORY, (0, available - wanted), (last, available - 1)))
+            .flatten()
+            .map(|sel| {
+                String::from_utf8_lossy(&self.format_with(ffi::FORMAT_PLAIN, Some(&sel), false, false)).into_owned()
+            });
+        let mut rows: Vec<String> = history
+            .iter()
+            .flat_map(|h| h.split('\n'))
+            .take(wanted as usize)
+            .map(|r| r.trim_end().to_string())
+            .collect();
+        rows.extend(screen);
+        rows.split_off(rows.len().saturating_sub(n))
+    }
+
     fn styled_row(&self, tag: i32, y: u32, cols: u16) -> String {
         let mut row = String::from(RESET);
         let Some(first) = self.grid_ref(tag, 0, y) else { return row };
@@ -248,6 +274,17 @@ mod tests {
         let mut t = Terminal::new(8, 1, 1 << 20);
         t.write("a界b".as_bytes());
         assert_eq!(plain(&t.styled_screen()[0]), "a界b");
+    }
+
+    #[test]
+    fn recent_rows_end_at_the_last_text_and_reach_into_history() {
+        let mut t = Terminal::new(20, 4, 1 << 20);
+        t.write(b"\x1b[32mone\r\ntwo  \r\nthree\r\nfour\r\nfive\r\n");
+        assert_eq!(t.recent_rows(2), ["four", "five"]);
+        assert_eq!(t.recent_rows(4), ["two", "three", "four", "five"], "history above the screen, spaces cut");
+        assert_eq!(t.recent_rows(9), ["one", "two", "three", "four", "five"]);
+        t.write(b"\x1b[?1049h\x1b[Hfull");
+        assert_eq!(t.recent_rows(9), ["full"], "a full-screen program: its screen alone");
     }
 
     #[test]
