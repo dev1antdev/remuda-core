@@ -324,6 +324,8 @@ impl Core {
         let queue = self.lock().queues.entry(id).or_default().clone();
         let sends = self.lock().sends.entry(id).or_default().clone();
         let _send_turn = if submits { Some(sends.lock().await) } else { None };
+        let quiet_waits = self.lock().quiet_waits.entry(id).or_default().clone();
+        let _wait_turn = if submits || quiet.is_zero() { None } else { Some(quiet_waits.lock().await) };
         let (out, steps, _turn) = 'waiting: loop {
             if submits {
                 loop {

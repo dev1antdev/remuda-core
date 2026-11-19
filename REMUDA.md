@@ -63,8 +63,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   team first, upstream's lines kept as they are: no build of ours carries it.
 - `distribution/macos-signing.md`: a line saying it describes upstream's release, not ours.
 - `terminal.keys` takes `now` (`rc keys --now`): keys a person pressed in remuda go at once, without
-  the quiet pause after their typing, ahead of keys still waiting for it, which let the terminal's
-  queue go while they wait (`api/types.rs`, `input.rs`, `api.rs`, a line in `src/SKILL.md`,
+  the quiet pause after their typing, ahead of keys still waiting for it, which keep their order in
+  a queue of their own and let the terminal's go while they wait (`api/types.rs`, `input.rs`,
+  `runtime.rs`, `api.rs`, a line in `src/SKILL.md`,
   the generated docs and schema; the tests are ours, `tests/remuda.rs`). A core older than this on
   an added machine ignores `now` and waits as before.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
