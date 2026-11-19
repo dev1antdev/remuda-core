@@ -20,8 +20,7 @@ move schema/hc.openrpc.json schema/rc.openrpc.json
 
 # Text files only (-I), never vendored code, upstream's history and licenses, or our own files
 # that name upstream on purpose.
-names='herdrdev/herdr-core|dev\.herdr\.core|Herdr Core|herdr[-_]core|in Herdr terminals|HERDR_RELEASES_URL|\bHC_|(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))hc(?![A-Za-z0-9])|--match .v\*.'
-git grep -l -z -I -P "$names" -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribution/notices' \
+git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribution/notices' \
   ':!REMUDA.md' ':!CLAUDE.md' ':!scripts/rebrand.sh' |
   xargs -0 perl -pi -e '
     s{herdrdev/herdr-core}{dev1antdev/remuda-core}g;
