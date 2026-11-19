@@ -69,9 +69,11 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `tests/remuda.rs`). A core older than this on an added machine ignores `now` and waits as before.
 - `terminal.attach` takes `keep_size`: a viewer that types but never sets the terminal's size,
   and leaves it as it is when no other viewer sets it (`api/types.rs`, `api.rs` with its
-  `keep_size` feature in hello, `viewers.rs`, `remote/viewers.rs`, which refuses it towards a core
-  without that feature, a paragraph in `schema/README.md`; `keep_size: false` in upstream's `AttachRequest` test literals; the
-  tests are ours, `tests/remuda.rs` and `src/remote/remuda_tests.rs`).
+  `keep_size` feature in hello, `viewers.rs`, `remote/viewers.rs` calling our
+  `remote/remuda.rs`, which refuses it towards a core without that feature and holds its test,
+  `remote.rs` declaring that module, a paragraph in `schema/README.md`, the generated schema,
+  `keep_size: false` in the `AttachRequest` literals of `src/runtime/tests.rs` and
+  `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

@@ -2389,6 +2389,13 @@
             "kind": "needs_framed"
           },
           "message": "needs_framed"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "needs_update"
+          },
+          "message": "needs_update"
         }
       ],
       "name": "terminal.attach",

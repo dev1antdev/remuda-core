@@ -27,7 +27,7 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
         .map(|(k, r)| (*k, r.clone()))
         .collect();
     for ((key, here), r) in waiting {
-        if keep_size_refused(&line, &r.params).is_some() {
+        if super::remuda::keep_size_refused(&line, &m, &r.params).is_some() {
             core.lock().relayed.remove(&(key, here));
             r.conn.with(|out| out.close(here, b""));
             continue;
@@ -78,17 +78,6 @@ pub(super) fn automatic_input(line: &Line, reply: &Value) -> bool {
     line.features.iter().any(|f| f == "automatic_input") && reply["automatic_input"] == true
 }
 
-/// A viewer that types without setting the size, on a machine whose core would set it anyway.
-pub(super) fn keep_size_refused(line: &Line, params: &Value) -> Option<RpcError> {
-    (params["keep_size"] == true && !line.features.iter().any(|f| f == "keep_size")).then(|| {
-        RpcError::new(
-            "unavailable",
-            "that machine's core cannot keep the size for a viewer that types",
-            "update the core there (rc update), or attach without keep_size",
-        )
-    })
-}
-
 pub(super) fn negotiate_resize(line: &Line, params: &mut Value) {
     if params["resize_notifications"] == true && !line.features.iter().any(|f| f == "resize_notifications") {
         params["resize_notifications"] = false.into();
@@ -99,7 +88,7 @@ pub(super) fn negotiate_resize(line: &Line, params: &mut Value) {
 /// relayed to a new channel on this connection, both ways.
 pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Value) -> Result<Value, RpcError> {
     let line = line(core, m).await?;
-    if let Some(refused) = keep_size_refused(&line, &params) {
+    if let Some(refused) = super::remuda::keep_size_refused(&line, m, &params) {
         return Err(refused);
     }
     negotiate_resize(&line, &mut params);

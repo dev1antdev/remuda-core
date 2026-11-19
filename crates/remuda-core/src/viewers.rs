@@ -45,6 +45,13 @@ pub struct Viewer {
     answers: crate::relay::Answers,
 }
 
+impl Viewer {
+    /// Whether this viewer's size and colors can be the terminal's.
+    fn sets_size(&self) -> bool {
+        !self.observe && !self.keep_size
+    }
+}
+
 impl Display {
     /// Answer the program's color and cell-size queries with these facts.
     pub(crate) fn apply(&self, screen: &mut ghostty_vt::Terminal) {
@@ -339,7 +346,7 @@ impl Core {
         v.display.cell = display.cell.or(v.display.cell);
         let display = st.viewers[&id]
             .iter()
-            .filter(|v| !v.observe && !v.keep_size)
+            .filter(|v| v.sets_size())
             .max_by_key(|v| v.active_at)
             .filter(|v| Arc::ptr_eq(&v.conn, conn) && v.channel == channel)
             .map(|v| v.display.clone());
@@ -390,8 +397,7 @@ impl Core {
     /// with none, the terminal runs headless.
     fn apply_size(&self, st: &mut State, id: u32) {
         let viewers = st.viewers.get(&id);
-        let leader =
-            viewers.and_then(|vs| vs.iter().filter(|v| !v.observe && !v.keep_size).max_by_key(|v| v.active_at));
+        let leader = viewers.and_then(|vs| vs.iter().filter(|v| v.sets_size()).max_by_key(|v| v.active_at));
         // Only viewers that keep the size are left: the terminal stays as it is.
         if leader.is_none() && viewers.is_some_and(|vs| vs.iter().any(|v| v.keep_size)) {
             return;

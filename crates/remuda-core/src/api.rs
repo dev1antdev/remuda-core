@@ -103,7 +103,7 @@ methods! { Ctx<'_>;
         errors ["not_found", "machine_unknown"];
     "terminal.attach" => terminal_attach, AttachParams => AttachResult,
         "Open a raw stream to a live terminal on this framed connection (see `hello` with `framed`). Loss ends the stream even when kept; reattach after the restarted event.",
-        errors ["not_found", "machine_unknown", "finished", "unavailable", "needs_framed"];
+        errors ["not_found", "machine_unknown", "finished", "unavailable", "needs_framed", "needs_update"];
     "terminal.send" => terminal_send, SendParams => SendResult,
         "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`.",
         errors ["not_found", "machine_unknown", "finished", "unavailable", "blocked", "status_mismatch", "invalid_params", "config", "cancelled"];

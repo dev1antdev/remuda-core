@@ -103,7 +103,8 @@ behavior: no additional resize paints or RESIZE frames.
 attaching, typing, RESIZE and FOCUS leave it to the other viewers, and with only such
 viewers left the terminal keeps its size. It opts in to `resize_notifications` like an
 observer. Cores advertise `keep_size` in `hello.features`; a relay refuses it towards a
-core that does not, rather than let that core hand it the size.
+core that does not, rather than let that core hand it the size. Clients send it only to a
+core that lists it: an older core ignores the field and gives the viewer the size.
 
 Flow control: a stream starts with 256 KiB of credit. The viewer sends
 CREDIT for the bytes it has written out. A viewer that falls more than

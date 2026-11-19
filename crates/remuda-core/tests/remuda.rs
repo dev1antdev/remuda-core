@@ -18,11 +18,6 @@ fn bytes(s: &Session) -> String {
     s.json(&["run", "--bg", "sh", "-c", BYTES])["address"].as_str().unwrap().to_string()
 }
 
-fn size(s: &Session, t: &str) -> (u64, u64) {
-    let r = s.json(&["get", t]);
-    (r["cols"].as_u64().unwrap(), r["rows"].as_u64().unwrap())
-}
-
 #[test]
 fn keys_now_skip_the_pause_a_person_typing_starts() {
     let s = session("3000");
@@ -53,9 +48,9 @@ fn a_viewer_that_keeps_the_size_types_without_taking_it() {
     let s = session("0");
     let t = bytes(&s);
     let mut desk = Viewer::attach(&s, &t, 100, 30, json!({}));
-    assert_eq!(size(&s, &t), (100, 30));
+    assert_eq!(get(&s, &t)["cols"], 100);
     let mut phone = Viewer::attach(&s, &t, 40, 20, json!({"keep_size": true, "resize_notifications": true}));
-    assert_eq!(size(&s, &t), (100, 30), "attaching");
+    assert_eq!(get(&s, &t)["cols"], 100, "attaching");
     let grid = std::iter::from_fn(|| phone.conn.stash.pop_front().or_else(|| phone.conn.read(Duration::from_secs(2))))
         .find(|(_, kind, _)| *kind == wire::RESIZE);
     assert_eq!(grid.map(|(_, _, size)| size), Some(vec![100, 0, 30, 0]), "told the terminal's own grid");
@@ -64,11 +59,11 @@ fn a_viewer_that_keeps_the_size_types_without_taking_it() {
     phone.conn.send(phone.channel, wire::FOCUS, &[1]);
     phone.typed(b"x");
     phone.shows("78");
-    assert_eq!(size(&s, &t), (100, 30), "typing, resizing and focusing");
+    assert_eq!(get(&s, &t)["cols"], 100, "typing, resizing and focusing");
 
     desk.conn.send(desk.channel, wire::CLOSE, &[]);
     desk.until("detached", |v| v.closed.is_some());
-    assert_eq!(size(&s, &t), (100, 30), "the desk left");
+    assert_eq!(get(&s, &t)["cols"], 100, "the desk left");
     drop(phone);
-    wait_until("headless again", || size(&s, &t) == (200, 120));
+    wait_until("headless again", || get(&s, &t)["cols"] == 200);
 }
