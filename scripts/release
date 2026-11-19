@@ -41,7 +41,8 @@ for _ in $(seq 60); do
   sleep 5
 done
 [ -n "$run" ] || fail "no CI run for $sha yet: run this again"
-gh run watch "$run" --repo "$repo" --exit-status --interval 30 || fail "CI failed on $sha: nothing tagged"
+gh run watch "$run" --repo "$repo" --exit-status --interval 30 ||
+  fail "CI failed on $sha (run $run), nothing tagged: fix it, or rerun a flaky job with gh run rerun $run --failed --repo $repo, then run this again"
 if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
   [ "$(git rev-parse "$tag^{commit}")" = "$sha" ] || fail "the local $tag is not on $sha"
 else

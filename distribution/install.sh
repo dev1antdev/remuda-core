@@ -88,7 +88,8 @@ if [ "$bundle" = 1 ] && [ -x "$tmp/remuda core.app/Contents/MacOS/remuda-core" ]
   [ ! -x "$bin/remuda-core" ] || action=updated
   bundled="$tmp/remuda core.app/Contents/MacOS/remuda-core"
   # Before anything in the bundle runs: our releases are signed ad-hoc with this identifier (REMUDA.md).
-  /usr/bin/codesign --verify --strict -R '=identifier "dev.mardeus.remuda-core"' "$tmp/remuda core.app" || fail "not a remuda-core release"
+  /usr/bin/codesign -dv "$tmp/remuda core.app" 2>&1 | grep -qx 'Signature=adhoc' &&
+    /usr/bin/codesign --verify --strict -R '=identifier "dev.mardeus.remuda-core"' "$tmp/remuda core.app" || fail "not a remuda-core release"
   if [ "$action" = updated ]; then
     installed=$("$bin/remuda-core" --version)
     candidate=$("$bundled" --version)

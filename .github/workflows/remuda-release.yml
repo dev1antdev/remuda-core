@@ -123,7 +123,8 @@ jobs:
     if: >-
       github.event_name == 'push' && github.ref_type == 'tag'
       && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
-    # One publish at a time across tags, so the latest check below sees the one before.
+    # One publish at a time across tags, so the latest check below sees the one before. GitHub keeps one
+    # waiting: a third tag cancels the second's publish, which leaves no release (REMUDA.md: re-run it).
     concurrency:
       group: remuda-release-publish
       cancel-in-progress: false
@@ -156,7 +157,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=${GITHUB_REF_NAME#remuda-v}
-          current=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          # No release yet only on GitHub's own 404; any other failure of the lookup stops the publish.
+          if current=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2> lookup.err); then :
+          elif grep -q 'HTTP 404' lookup.err; then current=
+          else cat lookup.err >&2; exit 1; fi
           newest=$(printf '%s\n%s\n' "${current#remuda-v}" "$version" | sort -V | tail -1)
           latest=$([ -z "$current" ] || [ "$newest" = "$version" ] && echo true || echo false)
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --latest="$latest" \
