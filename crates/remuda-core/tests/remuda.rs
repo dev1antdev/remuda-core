@@ -176,3 +176,18 @@ fn output_watches_tell_of_each_matching_row_as_it_comes() {
     assert_eq!(refused["error"]["data"]["kind"], "invalid_regex", "{refused}");
     assert!(refused["error"]["message"].as_str().unwrap().contains("\"bad\""));
 }
+
+#[test]
+fn an_output_watch_hears_a_command_that_prints_and_exits_at_once() {
+    let s = session("0");
+    let go = s.root.join("go");
+    let program = format!("while [ ! -e {} ]; do sleep 0.02; done; echo 'last words FAIL'", go.display());
+    let t = s.json(&["run", "--bg", "sh", "-c", &program])["address"].as_str().unwrap().to_string();
+    let mut events = s.connect();
+    let watch = json!([{"id": "fail", "terminal": t, "match": {"type": "substring", "value": "FAIL"}}]);
+    events.call(1, "events.subscribe", json!({"output": watch}));
+    std::thread::sleep(Duration::from_millis(400));
+    std::fs::write(&go, "").unwrap();
+    let event = next_event(&mut events, |m| m["params"]["type"] == "output");
+    assert_eq!(event["params"]["data"], json!({"watch": "fail", "line": "last words FAIL", "fresh": false}));
+}

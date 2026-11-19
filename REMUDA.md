@@ -93,8 +93,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - `events.subscribe` takes `output` watches (`output_watches` in hello's features): each row that
   comes into a watch's last rows of a terminal here matching its substring or regex (the `regex`
   crate, Unicode `\d` and `\w`) is an `output` event, the rows already there `fresh`; at most 256
-  watches, 1 to 200 rows, 4 KB a pattern; `invalid_regex` names the watch; a terminal on another
-  machine is refused. Ours: `remuda-core/src/watches.rs` (the watches, a task per subscription
+  watches, 1 to 200 rows, 4 KB a pattern, 256 bytes an id, 256 events (1 MB) a look and the rest in
+  the next; a finished terminal's last screen is read from its snapshot; `invalid_regex` names the
+  watch; a terminal on another machine is refused. Ours: `remuda-core/src/watches.rs` (the watches, a task per subscription
   looking every 250 ms at the terminals that printed) and `recent_rows` in
   `ghostty-vt/src/styled.rs` (the last rows' text with soft wraps joined, as `plain_text` reads it);
   in upstream's files `#[derive(Clone)]` on `Sink` in `events.rs`, the param in `api/types.rs`, the compile and

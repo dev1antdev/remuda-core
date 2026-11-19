@@ -727,7 +727,8 @@
         "description": "A watch on a terminal's last rows.",
         "properties": {
           "id": {
-            "description": "Named in each `output` event.",
+            "description": "Named in each `output` event (at most 256 bytes).",
+            "maxLength": 256,
             "type": "string"
           },
           "lines": {
