@@ -27,12 +27,12 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
         .map(|(k, r)| (*k, r.clone()))
         .collect();
     for ((key, here), r) in waiting {
-        // The screen is painted again; the viewer already has its history.
         if keep_size_refused(&line, &r.params).is_some() {
             core.lock().relayed.remove(&(key, here));
             r.conn.with(|out| out.close(here, b""));
             continue;
         }
+        // The screen is painted again; the viewer already has its history.
         let mut params = r.params.clone();
         params["history"] = 0.into();
         params["resumed"] = true.into();
