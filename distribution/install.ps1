@@ -1,6 +1,6 @@
 # Installs remuda-core (rc) on Windows, or updates it:
 #
-#   powershell -c "irm https://releases.herdr.dev/core/install.ps1 | iex"
+#   powershell -c "irm https://github.com/dev1antdev/remuda-core/releases/latest/download/install.ps1 | iex"
 #
 # Into %LOCALAPPDATA%\Programs\remuda-core (remuda-core.exe, Microsoft's
 # ConPTY beside it), added to your PATH, with rc.exe linked to it only if no
@@ -23,7 +23,7 @@ $ProgressPreference = "SilentlyContinue"
 # throw, not exit: under `irm | iex`, exit would close the person's window.
 function Fail($why) { throw "rc: $why" }
 
-$releases = if ($env:RC_RELEASES_URL) { $env:RC_RELEASES_URL.TrimEnd("/") } else { "https://releases.herdr.dev" }
+$releases = if ($env:RC_RELEASES_URL) { $env:RC_RELEASES_URL.TrimEnd("/") } else { "https://github.com/dev1antdev/remuda-core/releases" }
 $dir = if ($env:RC_INSTALL_DIR) { $env:RC_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA "Programs\remuda-core" }
 $arch = if ($env:PROCESSOR_ARCHITEW6432) { $env:PROCESSOR_ARCHITEW6432 } else { $env:PROCESSOR_ARCHITECTURE }
 if ($arch -ne "AMD64") { Fail "no build for $arch Windows yet (x64 only)" }
@@ -40,7 +40,7 @@ try {
   if ($zip) {
     Copy-Item $zip "$tmp\rc.zip"
   } else {
-    $manifest = if ($env:RC_VERSION) { "$releases/core/$($env:RC_VERSION)/manifest.json" } else { "$releases/core/latest.json" }
+    $manifest = if ($env:RC_VERSION) { "$releases/download/remuda-v$($env:RC_VERSION)/manifest.json" } else { "$releases/latest/download/manifest.json" }
     curl.exe -fsSL $manifest -o "$tmp\manifest.json"
     if ($LASTEXITCODE) { Fail "cannot reach $manifest" }
     $m = Get-Content -Raw "$tmp\manifest.json" | ConvertFrom-Json

@@ -84,7 +84,7 @@ State is not encrypted by core. Removing state is destructive, not a way to stop
 
 ```sh
 rc update
-rc update --version 0.1.5
+rc update --version 0.2.1
 ```
 
 The version form means at least that version, not an exact downgrade.
@@ -92,20 +92,19 @@ Updates restart the core while holders keep the terminals running.
 An update may also restart an older running core when the installed binary is already current.
 
 Release installers and updates download a manifest and check the archive's SHA-256 against it.
-The default release service is HTTPS at releases.herdr.dev.
-This trusts the release service and HTTPS; a checksum is not an independently signed release manifest.
+The default release service is this repository's GitHub Releases, over HTTPS.
+This trusts GitHub and HTTPS; a checksum is not an independently signed release manifest.
 The manifest is not verified with a separate signing key.
 
-Windows release signing is conditional in the release workflow.
-When the signing profile is configured, the workflow signs and verifies the executable with Azure Artifact Signing.
-If the profile is unset, it publishes unsigned builds. Windows may block those builds.
-Do not assume every downloaded build is signed.
+Windows builds are not signed. A browser download of one may be blocked by SmartScreen; the installer and `rc update` fetch it with curl, which marks nothing.
 
 `rc update --from /path/to/remuda-core` installs a local build instead of downloading one.
 Only use a build you trust. The updater's compatibility checks are not a review of its code.
 
 On macOS, a release that ships `remuda core.app` installs as that bundle when rc is installed under your home folder and not as root.
-With the default release service, the installer and `rc update` refuse the bundle unless `codesign` finds it signed by Herdr's Apple team (`2W9652Q7QR`) with identifier `dev.mardeus.remuda-core`.
+Releases are signed ad-hoc, with no Apple Developer ID: the installer and `rc update` refuse a bundle unless `codesign` finds its identifier `dev.mardeus.remuda-core`.
+An ad-hoc signature changes with every build, so macOS asks again for the privacy access it gave the previous one.
 Once rc runs from the bundle, an update will not replace it with a bare executable.
 As root or outside your home folder, they install the plain `remuda-core` executable, checked only by its SHA-256.
-With another `RC_RELEASES_URL`, or `rc update --from` a bundle, an ad-hoc signature with that identifier is enough, so that service or file is trusted as it is.
+With another `RC_RELEASES_URL`, or `rc update --from` a bundle, that service or file is trusted as it is, under the same check.
+The identifier check catches a damaged or wrong bundle, not a forged one: anyone can sign ad-hoc with that identifier, and only GitHub and HTTPS stand behind the download.

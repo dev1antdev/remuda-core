@@ -17,15 +17,26 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **Commits** keep upstream's lowercase conventional subject, may carry a body and may end with a
   `Co-Authored-By:` trailer for the agent that wrote them: AGENTS.md's "single line, no AI co-author
   lines" does not hold here.
-- **Releases** are ours, tagged `remuda-v*` on a version line of our own. Upstream's
-  `.github/workflows/release.yml` signs with Herdr's secrets and publishes to Herdr's servers: it
-  stays disabled, never enable it. CHANGELOG.md is upstream's history; our releases do not go in it.
+- **Releases** are ours, on this repository's GitHub Releases, which `rc update`, the installers and
+  `rc machine add` read. The owner runs `scripts/release X.Y.Z` on master: it sets the version, marks
+  the API as released, pushes, waits for CI and tags `remuda-vX.Y.Z`, and
+  `.github/workflows/remuda-release.yml` builds the five targets and publishes them. The version line
+  is our own: it begins at 0.2.0, a patch for each of our releases, a minor for each upstream merge.
+  macOS builds are signed ad-hoc (no Apple Developer ID): macOS asks again for its privacy access
+  after each update. Windows builds are unsigned. Upstream's `.github/workflows/release.yml` signs
+  with Herdr's secrets and publishes to Herdr's servers: it stays disabled, never enable it; the
+  justfile's `release-prepare` and `release-publish` are its recipes (a `v*` tag, a CHANGELOG entry):
+  never run them. CHANGELOG.md is upstream's history; our release notes are GitHub's, from the pull
+  requests. If `scripts/release` fails, run it again, after a fix on master too: once Cargo.toml says
+  that version, it waits for HEAD's CI and tags HEAD, and it stops if the tag is on origin already;
+  a flaky job is rerun first (`gh run rerun <run> --failed`, the run it names). If the publish fails, look before acting:
+  `gh release view remuda-vX.Y.Z --repo dev1antdev/remuda-core --json isDraft,assets`; a draft is
+  deleted (`gh release delete … --yes`, the tag stays) and the tag's whole run re-run, a published
+  release is left as it is. Publishes wait for each other, and an older version published after a
+  newer one is not made latest.
 - **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
   variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
-  `scripts/rebrand.sh` puts them in. Until our release setup lands, `rc update`, the installers and
-  `rc machine add` to a machine of another OS or CPU do not work: they look for our names in Herdr's
-  release archives and for our bundle id under Herdr's signature, and refuse before installing
-  anything. Leave them to the release setup.
+  `scripts/rebrand.sh` puts them in.
 - **The API** differs from herdr-core's in names alone: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables.
 
@@ -41,9 +52,17 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - Every file upstream's names reach, renamed and moved by `scripts/rebrand.sh`, which also points
   CI's upgrade test at our `remuda-v*` tags. A file of ours that names upstream on purpose goes on
   the script's list of exclusions.
-- `AGENTS.md`, `README.md`: one line each pointing here; README's Install says to build from source
-  until our releases exist.
+- `AGENTS.md`, `README.md`: one line each pointing here; README's Install names our installers.
 - `scripts/install-local.sh`: makes the `rc` link only when no other `rc` is on PATH.
+- Our releases' addresses and their check: `crates/remuda-core/src/releases.rs` (the GitHub layout,
+  `latest/download` and `download/remuda-v<version>`), `distribution/install.sh` and `install.ps1`,
+  `scripts/manifest`, the tests' fake releases, and the ad-hoc signature accepted in
+  `platform/mod.rs`, `platform/macos_bundle.rs` and `install.sh` (which checks the identifier before
+  anything in the bundle runs, for any release address); `docs/security.md` says so. `macos_bundle.rs` still tries Herdr's
+  team first, upstream's lines kept as they are: no build of ours carries it.
+- `distribution/macos-signing.md`: a line saying it describes upstream's release, not ours.
+- `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
+  `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
 ## Taking upstream's changes
 
@@ -68,16 +87,25 @@ A "file location" conflict needs only `git add` of the file where git put it. In
 changes of ours beyond the rename, keep upstream's change and apply ours on top of it, never taking
 our side of a whole hunk or file (`-X ours`, `checkout --ours`), then `git add` it.
 
-When `git ls-files -u` prints nothing, rename, stage, look, and commit the merge:
+When `git ls-files -u` prints nothing, put our version line back (the one exception to the rule
+above: our `version` in `crates/remuda-core/Cargo.toml` and our `schema/released.openrpc.json`, both
+from the pre-merge HEAD, whether git merged them or not), rename, stage, look, and commit the merge:
 
 ```sh
-scripts/rebrand.sh && git add -A && git diff --cached --stat &&
+v=$(git show HEAD:crates/remuda-core/Cargo.toml | sed -n 's/^version = "\(.*\)"/\1/p') &&
+  sed -i.bak "s/^version = \".*\"/version = \"$v\"/" crates/remuda-core/Cargo.toml &&
+  rm crates/remuda-core/Cargo.toml.bak && git checkout HEAD -- schema/released.openrpc.json &&
+  scripts/rebrand.sh && git add -A && git diff --cached --stat &&
   git commit -m "chore: merge upstream vX.Y.Z"
 ```
 
-The script stops, naming them, when a file still has a copy at both its old and its new place.
-Update the list above if the files we change moved. Run `just check` and `just docs-check`, open a
-pull request to `master` and merge it with a merge commit, never squashed or rebased: a squash drops
+The script stops, naming them, when a file still has a copy at both its old and its new place, and
+regenerates `Cargo.lock`; the next `scripts/release` takes the next minor. Update the list above if
+the files we change moved, and bring any change upstream made to the build job of
+`.github/workflows/release.yml` into ours, `remuda-release.yml`. This must print nothing:
+`git grep -n releases.herdr.dev -- ':!.github/workflows/release.yml' ':!CHANGELOG.md' ':!REMUDA.md'
+':!crates/remuda-core/tests/distribution.rs'`. Run `just check` and `just docs-check`, open a pull
+request to `master` and merge it with a merge commit, never squashed or rebased: a squash drops
 their history, and the next merge conflicts on the same lines again.
 
 ```sh

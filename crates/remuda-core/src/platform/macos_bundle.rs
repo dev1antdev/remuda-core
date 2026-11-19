@@ -40,7 +40,7 @@ pub fn verify(path: &Path, local: bool) -> io::Result<()> {
             return verify("=identifier \"dev.mardeus.remuda-core\"");
         }
     }
-    Err(io::Error::other("expected Herdr's Developer ID signature (dev.mardeus.remuda-core, team 2W9652Q7QR)"))
+    Err(io::Error::other("expected remuda-core's signature (identifier dev.mardeus.remuda-core)"))
 }
 
 struct Link {

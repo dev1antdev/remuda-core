@@ -54,7 +54,7 @@ impl Releases {
             port.is_some()
         });
         r.url = format!("http://127.0.0.1:{}", port.unwrap());
-        let dir = r.root.join("core").join(version);
+        let dir = r.root.join("download").join(format!("remuda-v{version}"));
         std::fs::create_dir_all(&dir).unwrap();
         let bin_dir = Path::new(BIN).parent().unwrap();
         for t in targets {
@@ -102,9 +102,10 @@ impl Releases {
         let manifest = String::from_utf8(out.stdout)
             .unwrap()
             .replace(&format!("\"version\": \"{THIS}\""), &format!("\"version\": \"{version}\""))
-            .replace(&format!("/core/{THIS}/"), &format!("/core/{version}/"));
+            .replace(&format!("/download/remuda-v{THIS}/"), &format!("/download/remuda-v{version}/"));
         std::fs::write(dir.join("manifest.json"), &manifest).unwrap();
-        std::fs::write(r.root.join("core/latest.json"), &manifest).unwrap();
+        std::fs::create_dir_all(r.root.join("latest/download")).unwrap();
+        std::fs::write(r.root.join("latest/download/manifest.json"), &manifest).unwrap();
         r
     }
 }
@@ -568,7 +569,7 @@ fn install_script_downloads(s: &Session, url: &str, releases: &str, installed: b
     std::fs::write(
         stub.join("curl"),
         format!(
-            "#!/bin/sh\nout=; url=; prev=\nfor a; do\n  if [ \"$prev\" = -o ]; then out=$a; else case $a in -*) ;; *) url=$a ;; esac; fi\n  prev=$a\ndone\necho \"$url\" >> {log}\ncase $url in */latest.json) cp {list} \"$out\"; exit 0 ;; esac\nexit 22\n",
+            "#!/bin/sh\nout=; url=; prev=\nfor a; do\n  if [ \"$prev\" = -o ]; then out=$a; else case $a in -*) ;; *) url=$a ;; esac; fi\n  prev=$a\ndone\necho \"$url\" >> {log}\ncase $url in */latest/download/manifest.json) cp {list} \"$out\"; exit 0 ;; esac\nexit 22\n",
             log = log.display(),
             list = list.display()
         ),
@@ -627,7 +628,7 @@ fn rc_update_downloads_checks_and_swaps() {
     assert_eq!((up["restarted"].as_bool(), up["release"].as_str()), (Some(true), Some(NEWER)), "{up}");
     assert_ne!(s.json(&["server", "status"])["pid"], pid);
 
-    let tar = r.root.join(format!("core/{NEWER}/remuda-core-{}.tar.gz", here()));
+    let tar = r.root.join(format!("download/remuda-v{NEWER}/remuda-core-{}.tar.gz", here()));
     std::fs::write(&tar, b"not what the list says").unwrap();
     let (_, e) = s.err(&["--json", "update"]);
     assert_eq!(e["error"]["kind"], "refused", "a damaged download changes nothing: {e}");
@@ -661,7 +662,7 @@ fn rc_update_to_a_version_takes_at_least_that_one() {
 fn rc_update_never_takes_a_release_of_another_generation() {
     let mut s = Session::new();
     let r = Releases::new(&s, NEWER, &[&here()]);
-    let latest = r.root.join("core/latest.json");
+    let latest = r.root.join("latest/download/manifest.json");
     let breaking = std::fs::read_to_string(&latest).unwrap().replace("\"generation\": 1", "\"generation\": 2");
     std::fs::write(&latest, breaking).unwrap();
     let dir = s.root.join("bin");

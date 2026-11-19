@@ -9,8 +9,19 @@ Core draws nothing. Use it from your shell, an agent, or your own app.
 
 ## Install
 
-There is no remuda-core release yet: build it from this checkout and run `just install` (see
-[Build from source](#build-from-source)).
+Linux and macOS:
+
+```sh
+curl -fsSL https://github.com/dev1antdev/remuda-core/releases/latest/download/install.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+powershell -c "irm https://github.com/dev1antdev/remuda-core/releases/latest/download/install.ps1 | iex"
+```
+
+Or build from this checkout and run `just install` (see [Build from source](#build-from-source)).
 
 Builds are available for Linux and macOS on x86_64 and aarch64, and Windows on x86_64.
 Linux builds are static. On Windows, templates and quoted shell commands need `sh` on PATH, such as Git for Windows provides.

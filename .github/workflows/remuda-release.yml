@@ -1,0 +1,171 @@
+# Our release (REMUDA.md): scripts/release pushes a tag `remuda-v<version>` matching
+# crates/remuda-core/Cargo.toml, and this builds the five targets upstream's release.yml builds,
+# signs macOS ad-hoc and publishes a GitHub Release. A pull request that touches the packaging, and
+# a manual run, build the same five without publishing.
+name: remuda-release
+
+on:
+  push:
+    tags: ["remuda-v*"]
+  pull_request:
+    paths:
+      - .github/workflows/remuda-release.yml
+      - distribution/**
+      - scripts/fetch-conpty.ps1
+      - scripts/mac-bundle
+      - scripts/mac-sign
+      - scripts/manifest
+      - scripts/package
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never cancel: a cancelled tag run is a half release.
+concurrency:
+  group: remuda-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  RUST_TOOLCHAIN: 1.95.0
+  IS_TAG: ${{ github.ref_type == 'tag' }}
+
+jobs:
+  build:
+    strategy:
+      # Every target reports: publish needs all five anyway.
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, target: x86_64-unknown-linux-musl, runner: ubuntu-latest }
+          - { name: linux-aarch64, target: aarch64-unknown-linux-musl, runner: ubuntu-22.04-arm }
+          - { name: macos-aarch64, target: aarch64-apple-darwin, runner: macos-15 }
+          # Cross-build on Apple Silicon; verify the Intel binary under Rosetta.
+          - { name: macos-x86_64, target: x86_64-apple-darwin, runner: macos-15 }
+          # windows-2025 now ships Visual Studio 18, whose STL refuses Zig 0.16's clang (STL1000).
+          - { name: windows-x86_64, target: x86_64-pc-windows-msvc, runner: windows-2022 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: true
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@d1434d08867e3ee9daa34448df10607b98908d29 # v2.2.1
+        with:
+          version: 0.16.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.target }}-release
+          cache-workspace-crates: true
+          cache-bin: false
+          save-if: ${{ github.ref == 'refs/heads/master' }}
+      - name: Version matches the tag
+        if: env.IS_TAG == 'true'
+        run: |
+          want="remuda-v$(sed -n 's/^version = "\(.*\)"/\1/p' crates/remuda-core/Cargo.toml | head -1)"
+          [ "$want" = "$GITHUB_REF_NAME" ] || { echo "tag $GITHUB_REF_NAME but Cargo.toml says $want"; exit 1; }
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }} -p remuda-core
+      - name: Assemble macOS bundle
+        if: runner.os == 'macOS'
+        run: sh scripts/mac-bundle target/${{ matrix.target }}/release/remuda-core 'target/${{ matrix.target }}/release/remuda core.app'
+      # No certificate is given, so mac-sign signs ad-hoc with our identifier.
+      - name: Sign macOS bundle and standalone executable
+        if: runner.os == 'macOS'
+        run: |
+          scripts/mac-sign 'target/${{ matrix.target }}/release/remuda core.app'
+          scripts/mac-sign 'target/${{ matrix.target }}/release/remuda-core'
+      - name: Pack
+        if: runner.os != 'Windows'
+        run: |
+          bin=target/${{ matrix.target }}/release/remuda-core
+          "$bin" --version # it runs on its own platform
+          if [ "${{ runner.os }}" = Linux ]; then file "$bin" | grep -q 'static' || { file "$bin"; echo "not static"; exit 1; }; fi
+          mkdir -p dist
+          if [ "${{ runner.os }}" = macOS ]; then bin="$(dirname "$bin")/remuda core.app"; fi
+          sh scripts/package "$bin" dist/remuda-core-${{ matrix.name }}.tar.gz
+      # Windows: a zip of the exe, Microsoft's ConPTY (Windows' own swallows answers to programs) and
+      # its notices, zipped by Windows' tar, which is also what unpacks it.
+      - name: Pack (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $bin = "target/${{ matrix.target }}/release/remuda-core.exe"
+          & $bin --version
+          if ($LASTEXITCODE) { throw "it does not run" }
+          # A clean Windows has no Visual C++ runtime.
+          $text = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($bin)).ToLower()
+          foreach ($dll in "vcruntime140", "msvcp140", "api-ms-win-crt-") { if ($text.Contains($dll)) { throw "remuda-core.exe imports $dll" } }
+          New-Item -ItemType Directory -Force stage/THIRD-PARTY-NOTICES, dist | Out-Null
+          Copy-Item $bin stage/
+          Copy-Item LICENSE stage/
+          Copy-Item crates/remuda-core/THIRD-PARTY-NOTICES stage/THIRD-PARTY-NOTICES/remuda-core.txt
+          scripts/fetch-conpty.ps1 -Dest stage
+          Copy-Item distribution/windows/* stage/THIRD-PARTY-NOTICES/
+          tar -a -cf dist/remuda-core-${{ matrix.name }}.zip -C stage remuda-core.exe conpty LICENSE THIRD-PARTY-NOTICES
+          if ($LASTEXITCODE) { throw "zip failed" }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: remuda-core-${{ matrix.name }}
+          path: dist/remuda-core-${{ matrix.name }}.*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    # Only a tag the owner pushed, and a run the owner started: a re-run keeps the pusher as the actor.
+    if: >-
+      github.event_name == 'push' && github.ref_type == 'tag'
+      && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    # One publish at a time across tags, so the latest check below sees the one before; every other
+    # one waits its turn (queue: max).
+    concurrency:
+      group: remuda-release-publish
+      cancel-in-progress: false
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Every target is here
+        run: |
+          for f in linux-x86_64.tar.gz linux-aarch64.tar.gz macos-aarch64.tar.gz macos-x86_64.tar.gz windows-x86_64.zip; do
+            [ -f "dist/remuda-core-$f" ] || { echo "dist/remuda-core-$f is missing: re-run the whole run, not this job"; exit 1; }
+          done
+      - name: Manifest and checksums
+        run: |
+          RELEASES_URL="https://github.com/$GITHUB_REPOSITORY/releases" scripts/manifest dist > dist/manifest.json
+          cat dist/manifest.json
+          (cd dist && sha256sum remuda-core-* manifest.json > checksums.txt)
+      # gh uploads into a draft and publishes it once every file is up, so latest/download never sees
+      # half a release; an older version published later (a recovered one) is not made latest.
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=${GITHUB_REF_NAME#remuda-v}
+          # No release yet only on GitHub's own 404; any other failure of the lookup stops the publish.
+          if current=$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name 2> lookup.err); then :
+          elif grep -q 'HTTP 404' lookup.err; then current=
+          else cat lookup.err >&2; exit 1; fi
+          newest=$(printf '%s\n%s\n' "${current#remuda-v}" "$version" | sort -V | tail -1)
+          latest=$([ -z "$current" ] || [ "$newest" = "$version" ] && echo true || echo false)
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --latest="$latest" \
+            --title "remuda-core $version" --generate-notes \
+            dist/remuda-core-* dist/manifest.json dist/checksums.txt distribution/install.sh distribution/install.ps1

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs remuda-core (rc), or updates it:
 #
-#   curl -fsSL https://releases.herdr.dev/core/install.sh | sh
+#   curl -fsSL https://github.com/dev1antdev/remuda-core/releases/latest/download/install.sh | sh
 #
 # Into ~/.local/bin/remuda-core, with `rc` beside it only if no `rc` exists
 # (some window managers ship one). An rc that is already there is swapped
@@ -10,7 +10,7 @@
 # RC_RELEASES_URL points elsewhere (tests).
 set -eu
 
-releases=${RC_RELEASES_URL:-https://releases.herdr.dev}
+releases=${RC_RELEASES_URL:-https://github.com/dev1antdev/remuda-core/releases}
 bin=${RC_INSTALL_DIR:-$HOME/.local/bin}
 
 say() { printf '%s\n' "$*"; }
@@ -39,8 +39,8 @@ sha256() {
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp" "$bin/remuda-core.staged"' EXIT
 
-manifest="$releases/core/latest.json"
-[ -n "${RC_VERSION:-}" ] && manifest="$releases/core/$RC_VERSION/manifest.json"
+manifest="$releases/latest/download/manifest.json"
+[ -n "${RC_VERSION:-}" ] && manifest="$releases/download/remuda-v$RC_VERSION/manifest.json"
 curl -fsSL "$manifest" -o "$tmp/manifest.json" || fail "cannot reach $manifest"
 # Read without jq: the manifest is flat enough for sed once spaces are gone.
 flat=$(tr -d '\n ' < "$tmp/manifest.json")
@@ -87,6 +87,9 @@ if [ "$bundle" = 1 ] && [ -x "$tmp/remuda core.app/Contents/MacOS/remuda-core" ]
   action=installed
   [ ! -x "$bin/remuda-core" ] || action=updated
   bundled="$tmp/remuda core.app/Contents/MacOS/remuda-core"
+  # Before anything in the bundle runs: our releases are signed ad-hoc with this identifier (REMUDA.md).
+  /usr/bin/codesign -dv "$tmp/remuda core.app" 2>&1 | grep -qx 'Signature=adhoc' &&
+    /usr/bin/codesign --verify --strict -R '=identifier "dev.mardeus.remuda-core"' "$tmp/remuda core.app" || fail "not a remuda-core release"
   if [ "$action" = updated ]; then
     installed=$("$bin/remuda-core" --version)
     candidate=$("$bundled" --version)
@@ -96,10 +99,6 @@ if [ "$bundle" = 1 ] && [ -x "$tmp/remuda core.app/Contents/MacOS/remuda-core" ]
       for (i=1; i<=3; i++) { if (a[i]+0 > b[i]+0) exit 1; if (a[i]+0 < b[i]+0) exit 0 }
     }' || fail "$candidate is older than $installed; use rc update --from with --force to downgrade"
   fi
-  case "$releases" in
-    https://releases.herdr.dev | https://releases.herdr.dev/)
-      /usr/bin/codesign --verify --strict -R '=identifier "dev.mardeus.remuda-core" and anchor apple generic and certificate leaf[subject.OU] = "2W9652Q7QR"' "$tmp/remuda core.app" || fail "not a signed Herdr release" ;;
-  esac
   "$bundled" --rc-install-bundle "$bundled" "$bin/remuda-core" || fail "installing remuda core.app failed"
   # A fresh install must not start a core (especially not a system/root core).
   if [ "$action" = updated ]; then
