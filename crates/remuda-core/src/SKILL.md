@@ -110,7 +110,8 @@ that fit in a duration. If the config is invalid, delivery uses defaults and
 logs the config error once in `core.log`. Reverse sends allow at least the
 default 60-second hold, but a parent configured above that
 can still outwait a child with a shorter limit. Sends to an added machine keep
-waiting while its line is alive.
+waiting while its line is alive. `rc keys` waits for the quiet pause too; its
+`--now` skips it, for keys a person pressed in another app: never set it yourself.
 
 Reports arrive tagged, for example:
 

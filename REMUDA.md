@@ -37,8 +37,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
   variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
   `scripts/rebrand.sh` puts them in.
-- **The API** differs from herdr-core's in names alone: the error kind `rc_missing` (theirs
-  `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables.
+- **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
+  `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
+  add, listed below (`terminal.keys`'s `now`).
 
 ## Keeping upstream's fixes applying
 
@@ -61,6 +62,11 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   anything in the bundle runs, for any release address); `docs/security.md` says so. `macos_bundle.rs` still tries Herdr's
   team first, upstream's lines kept as they are: no build of ours carries it.
 - `distribution/macos-signing.md`: a line saying it describes upstream's release, not ours.
+- `terminal.keys` takes `now` (`rc keys --now`): keys a person pressed in remuda go without the
+  quiet pause after their typing. They keep their turn in the terminal's one input queue, as
+  `interrupt` does: behind a `keys` call already waiting there for that pause (`api/types.rs`,
+  `input.rs`, `api.rs`, a line in `src/SKILL.md`, the generated docs and schema; the tests are ours,
+  `tests/remuda.rs`). A core older than this on an added machine ignores `now` and waits as before.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
