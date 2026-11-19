@@ -512,9 +512,9 @@ impl Core {
         }
     }
 
-    /// Named keys, after a person has paused typing.
-    pub async fn keys(&self, id: u32, names: &[String]) -> Result<(Option<String>, u64), RpcError> {
-        self.type_in(id, quiet(), false, |st, t| {
+    /// Named keys, after a person has paused typing, or at once when `now` (keys the person pressed).
+    pub async fn keys(&self, id: u32, names: &[String], now: bool) -> Result<(Option<String>, u64), RpcError> {
+        self.type_in(id, if now { Duration::ZERO } else { quiet() }, false, |st, t| {
             let screen = st.screens.get(&id).expect("live terminal has a screen");
             let mut steps = Vec::new();
             for name in names {

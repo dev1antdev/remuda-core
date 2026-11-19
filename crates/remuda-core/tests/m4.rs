@@ -167,6 +167,26 @@ fn agents_wait_for_a_person_to_pause() {
 }
 
 #[test]
+fn keys_now_skip_the_pause_a_person_typing_starts() {
+    let mut s = Session::new();
+    s.env.push(("RC_QUIET_MS".into(), "3000".into()));
+    let t = s.json(&["run", "--bg", "sh", "-c", BYTES])["address"].as_str().unwrap().to_string();
+    let mut person = Viewer::attach(&s, &t, 80, 24, json!({}));
+    let mut conn = s.connect();
+    person.typed(b"\x1b[A");
+    person.shows("41");
+    let pressed = Instant::now();
+    conn.call(1, "terminal.keys", json!({"terminal": t, "keys": ["a"], "now": true}));
+    person.shows("61");
+    assert!(pressed.elapsed() < Duration::from_millis(100), "arrived after {:?}", pressed.elapsed());
+
+    person.typed(b"\x1b[A");
+    let pressed = Instant::now();
+    conn.call(2, "terminal.keys", json!({"terminal": t, "keys": ["b"]}));
+    assert!(pressed.elapsed() >= Duration::from_millis(2500), "did not wait: {:?}", pressed.elapsed());
+}
+
+#[test]
 fn a_send_waits_for_the_person_to_send_or_clear_their_draft() {
     let mut s = session();
     s.env.push(("RC_DRAFT_MS".into(), "2000".into()));

@@ -561,7 +561,7 @@ async fn terminal_put(core: Ctx<'_>, p: PutParams) -> Result<PutResult, RpcError
 
 async fn terminal_keys(core: Ctx<'_>, p: KeysParams) -> Result<KeysResult, RpcError> {
     let id = resolve(core, &p.terminal)?;
-    let (status, turn) = core.keys(id, &p.keys).await?;
+    let (status, turn) = core.keys(id, &p.keys, p.now).await?;
     core.saw(p.caller.as_deref(), id);
     core.flush_saved().await?;
     Ok(KeysResult { status, turn })
