@@ -9,17 +9,8 @@ Core draws nothing. Use it from your shell, an agent, or your own app.
 
 ## Install
 
-Linux and macOS:
-
-```sh
-curl -fsSL https://releases.herdr.dev/core/install.sh | sh
-```
-
-Windows (PowerShell):
-
-```powershell
-powershell -c "irm https://releases.herdr.dev/core/install.ps1 | iex"
-```
+There is no remuda-core release yet: build it from this checkout and run `just install` (see
+[Build from source](#build-from-source)).
 
 Builds are available for Linux and macOS on x86_64 and aarch64, and Windows on x86_64.
 Linux builds are static. On Windows, templates and quoted shell commands need `sh` on PATH, such as Git for Windows provides.

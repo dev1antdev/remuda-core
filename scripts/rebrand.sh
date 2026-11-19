@@ -5,18 +5,27 @@
 set -eu
 cd "$(git rev-parse --show-toplevel)"
 
-# File by file, so a file an upstream merge left in an old folder joins the moved one.
-move() {
-  git ls-files -- "$1" | while IFS= read -r from; do
-    to="$2${from#"$1"}"
-    mkdir -p "$(dirname "$to")"
-    git mv -f "$from" "$to"
-  done
-  if [ -d "$1" ]; then find "$1" -type d -empty -delete; fi
+# File by file, so a file an upstream merge left in an old folder joins the moved one; a file with a
+# copy at both places stops the run before anything moves.
+tab=$(printf '\t')
+pairs() { git ls-files -- "$1" | while IFS= read -r from; do printf '%s\t%s\n' "$from" "$2${from#"$1"}"; done; }
+moves() {
+  pairs crates/herdr-core crates/remuda-core
+  pairs skills/herdr-core skills/remuda-core
+  pairs schema/hc.openrpc.json schema/rc.openrpc.json
 }
-move crates/herdr-core crates/remuda-core
-move skills/herdr-core skills/remuda-core
-move schema/hc.openrpc.json schema/rc.openrpc.json
+both=$(moves | while IFS=$tab read -r from to; do if [ -e "$to" ]; then printf '  %s  %s\n' "$from" "$to"; fi; done)
+if [ -n "$both" ]; then
+  printf 'rebrand.sh: these files exist at both places; keep one of each (git mv -f takes upstream'\''s, git rm keeps ours), then run again:\n%s\n' "$both" >&2
+  exit 1
+fi
+moves | while IFS=$tab read -r from to; do
+  mkdir -p "$(dirname "$to")"
+  git mv "$from" "$to"
+done
+for old in crates/herdr-core skills/herdr-core; do
+  if [ -d "$old" ]; then find "$old" -type d -empty -delete; fi
+done
 
 # Text files only (-I), never vendored code, upstream's history and licenses, or our own files
 # that name upstream on purpose.
