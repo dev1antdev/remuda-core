@@ -335,7 +335,7 @@ impl Core {
                     tokio::time::sleep(left.min(Duration::from_millis(25))).await;
                 }
             }
-            let turn = queue.lock().await;
+            let mut turn = queue.lock().await;
             loop {
                 if submits {
                     crate::server::check_cancelled()?;
@@ -370,7 +370,10 @@ impl Core {
                     drop(turn);
                     continue 'waiting;
                 }
+                // Waiting for quiet without the queue, so a `now` key or an interrupt goes first.
+                drop(turn);
                 tokio::time::sleep(left.min(Duration::from_millis(25))).await;
+                turn = queue.lock().await;
             }
         };
         for step in steps {
