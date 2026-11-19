@@ -668,7 +668,7 @@ mod tests {
             ("RUNTIME_DIRECTORY", "/run/user/1/rc-serve-12345678"),
             ("BASH_FUNC_f%%", "() { :; }"),
         ]));
-        assert_eq!(ssh.keys().collect::<Vec<_>>(), ["RC_SESSION", "PATH"]);
+        assert_eq!(ssh.keys().collect::<Vec<_>>(), ["PATH", "RC_SESSION"]);
         let desktop = super::service_env(map(&[("DISPLAY", ":0"), ("PATH", "/usr/bin")]));
         assert!(desktop.contains_key("DISPLAY"), "a desktop that doesn't tell systemd keeps its display");
     }

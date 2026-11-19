@@ -46,6 +46,7 @@ git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribu
     s{(?:(?<![A-Za-z0-9])|(?<=\\[nrt0]))HC_}{RC_}g;
     s{(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))hc(?![A-Za-z0-9])}{rc}g;
     s{--match \x27v\*\x27}{--match \x27remuda-v*\x27}g;
+    s{\["RC_SESSION", "PATH"\]}{["PATH", "RC_SESSION"]}g;  # a sorted map: RC_ sorts after PATH, HC_ before it
   '
 
 # The longer names move some lines past rustfmt's width, and the renamed package its place in the lock.
