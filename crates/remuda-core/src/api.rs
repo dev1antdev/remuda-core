@@ -378,6 +378,12 @@ async fn terminal_label(core: Ctx<'_>, p: LabelParams) -> Result<Public, RpcErro
 async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcError> {
     let id = resolve(core, &p.terminal)?;
     core.saw(p.caller.as_deref(), id);
+    if p.format == crate::styled::ReadFormat::Vt
+        && let Some(result) = crate::styled::read(core, id, p.lines)
+    {
+        core.flush_saved().await?;
+        return Ok(result);
+    }
     // A full-screen app keeps its history to itself: scroll it to read it.
     let full_screen = core.lock().screens.get(&id).is_some_and(|s| s.alt_screen());
     if full_screen && p.lines > 0 {

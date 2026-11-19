@@ -702,6 +702,21 @@
         ],
         "type": "object"
       },
+      "ReadFormat": {
+        "description": "How `terminal.read` gives the text.",
+        "oneOf": [
+          {
+            "const": "plain",
+            "description": "Plain text.",
+            "type": "string"
+          },
+          {
+            "const": "vt",
+            "description": "Rows that each start with a style reset and hold their text, colors and\nattributes as SGR, nothing else.",
+            "type": "string"
+          }
+        ]
+      },
       "ReadResult": {
         "properties": {
           "complete": {
@@ -2321,6 +2336,16 @@
               "string",
               "null"
             ]
+          }
+        },
+        {
+          "description": "plain, or vt: rows with their colors as SGR (a live terminal; a finished\none, and an older core, answer plain text).",
+          "name": "format",
+          "required": false,
+          "schema": {
+            "$ref": "#/components/schemas/ReadFormat",
+            "default": "plain",
+            "description": "plain, or vt: rows with their colors as SGR (a live terminal; a finished\none, and an older core, answer plain text)."
           }
         },
         {

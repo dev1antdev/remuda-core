@@ -39,7 +39,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `scripts/rebrand.sh` puts them in.
 - **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
-  add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`).
+  add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
+  `format`).
 
 ## Keeping upstream's fixes applying
 
@@ -76,6 +77,13 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `remote.rs` declaring that module, a paragraph in `schema/README.md`, the generated schema,
   `keep_size: false` in the `AttachRequest` literals of `src/runtime/tests.rs` and
   `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
+- `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
+  colors as SGR, each starting with a style reset, history above the screen on the main screen
+  only (a full-screen program is not scrolled for it); a finished terminal answers its plain text.
+  Ours: `ghostty-vt/src/styled.rs` (`styled_rows`, with its tests) and `remuda-core/src/styled.rs`
+  (`ReadFormat`, the read); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
+  `pub mod styled;` in `lib.rs`, the param in `api/types.rs`, its branch in `api.rs`, the default
+  in `api/run.rs`, the generated docs and schema; the test is ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

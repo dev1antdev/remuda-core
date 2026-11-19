@@ -377,6 +377,11 @@ pub struct ReadParams {
     #[arg(long, default_value_t = 0)]
     #[serde(default)]
     pub lines: usize,
+    /// plain, or vt: rows with their colors as SGR (a live terminal; a finished
+    /// one, and an older core, answer plain text).
+    #[arg(long, value_enum, default_value_t)]
+    #[serde(default)]
+    pub format: crate::styled::ReadFormat,
 }
 
 #[derive(Serialize, JsonSchema)]

@@ -824,5 +824,7 @@ fn alloc_call(f: impl FnOnce(*mut *mut u8, *mut usize) -> i32) -> Option<Vec<u8>
     Some(bytes)
 }
 
+mod styled;
+
 #[cfg(test)]
 mod tests;

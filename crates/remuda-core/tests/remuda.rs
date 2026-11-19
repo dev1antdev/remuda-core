@@ -79,3 +79,22 @@ fn an_observer_asking_to_keep_the_size_is_an_observer() {
     desk.until("detached", |v| v.closed.is_some());
     wait_until("headless with only an observer left", || get(&s, &t)["cols"] == 200);
 }
+
+#[test]
+fn read_in_vt_gives_each_row_with_its_colors() {
+    let s = session("0");
+    let program = "printf '\\033]2;title\\007\\033[1;31mred\\033[0m plain\\n'; sleep 100";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).contains("red plain"));
+    let vt = s.json(&["read", "--format", "vt", &t])["text"].as_str().unwrap().to_string();
+    let rows: Vec<&str> = vt.split('\n').collect();
+    assert!(rows.iter().all(|r| r.starts_with("\x1b[0m")), "{vt:?}");
+    assert!(rows[0].contains("\x1b[1m") && rows[0].contains("38;5;1mred"), "{vt:?}");
+    assert!(!vt.contains("\x1b]") && !vt.contains("\x1b[?") && !vt.contains("\x1b[H"), "{vt:?}");
+    assert!(!s.json(&["read", &t])["text"].as_str().unwrap().contains('\x1b'), "plain stays plain");
+
+    s.json(&["kill", &t]);
+    wait_until("finished", || get(&s, &t)["state"] == "finished");
+    let kept = s.json(&["read", "--format", "vt", &t])["text"].as_str().unwrap().to_string();
+    assert!(kept.contains("red plain") && !kept.contains('\x1b'), "{kept:?}");
+}
