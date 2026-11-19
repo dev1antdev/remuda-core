@@ -1,6 +1,7 @@
 # herdr-core
 
 If AGENTS.local.md exists, read it too: the maintainer's local rules.
+This is remuda's clone: read REMUDA.md too; where it differs from the rules below, it wins.
 
 `herdr-core` (alias `hc`) is a terminal runtime for coding agents: it runs
 programs in terminals, keeps them alive, relays raw bytes to any viewer,
