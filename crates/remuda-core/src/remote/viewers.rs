@@ -27,6 +27,11 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
         .map(|(k, r)| (*k, r.clone()))
         .collect();
     for ((key, here), r) in waiting {
+        if let Some(refused) = super::remuda::keep_size_refused(&line, &m, &r.params) {
+            core.lock().relayed.remove(&(key, here));
+            r.conn.with(|out| out.finish(here, &super::remuda::too_old(&refused)));
+            continue;
+        }
         // The screen is painted again; the viewer already has its history.
         let mut params = r.params.clone();
         params["history"] = 0.into();
@@ -39,6 +44,13 @@ pub(super) async fn reattach(core: Arc<Core>, m: Machine, line: Arc<Line>) {
         let mut st = core.lock();
         // Gone meanwhile (the viewer detached): nothing to resume.
         if !st.relayed.contains_key(&(key, here)) {
+            continue;
+        }
+        if let Err(e) = &reply
+            && e.kind == "needs_update"
+        {
+            st.relayed.remove(&(key, here));
+            r.conn.with(|out| out.finish(here, &super::remuda::too_old(e)));
             continue;
         }
         let reply = reply.ok();
@@ -83,6 +95,9 @@ pub(super) fn negotiate_resize(line: &Line, params: &mut Value) {
 /// relayed to a new channel on this connection, both ways.
 pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Value) -> Result<Value, RpcError> {
     let line = line(core, m).await?;
+    if let Some(refused) = super::remuda::keep_size_refused(&line, m, &params) {
+        return Err(refused);
+    }
     negotiate_resize(&line, &mut params);
     let here = conn.new_channel();
     conn.with(|out| out.open_paused(here));
@@ -93,7 +108,7 @@ pub async fn attach(core: &Core, conn: &Arc<Conn>, m: &Machine, mut params: Valu
     {
         Ok(mut r) => {
             let there = r["channel"].as_u64().unwrap_or_default() as u32;
-            let enabled = params["observe"] == true
+            let enabled = (params["observe"] == true || params["keep_size"] == true)
                 && params["resize_notifications"] == true
                 && r["resize_notifications"] == true;
             r["resize_notifications"] = enabled.into();

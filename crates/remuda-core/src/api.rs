@@ -22,6 +22,7 @@ pub const FEATURES: &[&str] = &[
     "resize_notifications",
     "automatic_input",
     "restart_environment",
+    "keep_size",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
@@ -102,7 +103,7 @@ methods! { Ctx<'_>;
         errors ["not_found", "machine_unknown"];
     "terminal.attach" => terminal_attach, AttachParams => AttachResult,
         "Open a raw stream to a live terminal on this framed connection (see `hello` with `framed`). Loss ends the stream even when kept; reattach after the restarted event.",
-        errors ["not_found", "machine_unknown", "finished", "unavailable", "needs_framed"];
+        errors ["not_found", "machine_unknown", "finished", "unavailable", "needs_framed", "needs_update"];
     "terminal.send" => terminal_send, SendParams => SendResult,
         "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`.",
         errors ["not_found", "machine_unknown", "finished", "unavailable", "blocked", "status_mismatch", "invalid_params", "config", "cancelled"];
@@ -450,6 +451,7 @@ async fn terminal_attach(core: Ctx<'_>, p: AttachParams) -> Result<AttachResult,
     }
     let req = crate::viewers::AttachRequest {
         observe: p.observe,
+        keep_size: p.keep_size,
         resize_notifications: p.resize_notifications,
         history: p.history,
         size: (p.cols, p.rows),
@@ -460,7 +462,7 @@ async fn terminal_attach(core: Ctx<'_>, p: AttachParams) -> Result<AttachResult,
     Ok(AttachResult {
         channel,
         terminal: Public(record(core, id)?),
-        resize_notifications: p.observe && p.resize_notifications,
+        resize_notifications: (p.observe || p.keep_size) && p.resize_notifications,
         automatic_input: true,
     })
 }

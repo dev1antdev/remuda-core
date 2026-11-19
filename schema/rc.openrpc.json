@@ -2389,6 +2389,13 @@
             "kind": "needs_framed"
           },
           "message": "needs_framed"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "needs_update"
+          },
+          "message": "needs_update"
         }
       ],
       "name": "terminal.attach",
@@ -2444,6 +2451,16 @@
             "format": "uint",
             "minimum": 0,
             "type": "integer"
+          }
+        },
+        {
+          "description": "Types, but never sets the terminal's size: its RESIZE only records its own.\nTakes `resize_notifications` like an observer.",
+          "name": "keep_size",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "Types, but never sets the terminal's size: its RESIZE only records its own.\nTakes `resize_notifications` like an observer.",
+            "type": "boolean"
           }
         },
         {

@@ -32,6 +32,8 @@ pub struct Viewer {
     pub conn: Arc<Conn>,
     pub channel: u32,
     pub observe: bool,
+    /// Types without ever setting the size (`terminal.attach` `keep_size`).
+    keep_size: bool,
     resize_notifications: bool,
     repaint_pending: bool,
     size: (u16, u16),
@@ -41,6 +43,13 @@ pub struct Viewer {
     /// An unfinished sequence exceeded continuation tracking; skip its tail.
     pub(crate) recovering: bool,
     answers: crate::relay::Answers,
+}
+
+impl Viewer {
+    /// Whether this viewer's size and colors can be the terminal's.
+    fn sets_size(&self) -> bool {
+        !self.observe && !self.keep_size
+    }
 }
 
 impl Display {
@@ -58,6 +67,7 @@ fn rgb(hex: &Option<String>) -> Option<Rgb> {
 
 pub struct AttachRequest {
     pub observe: bool,
+    pub keep_size: bool,
     pub resize_notifications: bool,
     pub history: usize,
     pub size: (u16, u16),
@@ -85,7 +95,8 @@ impl Core {
             conn: conn.clone(),
             channel,
             observe: req.observe,
-            resize_notifications: req.observe && req.resize_notifications,
+            keep_size: req.keep_size && !req.observe,
+            resize_notifications: (req.observe || req.keep_size) && req.resize_notifications,
             repaint_pending: false,
             size: req.size,
             active_at: (!req.resumed).then(Instant::now),
@@ -100,7 +111,7 @@ impl Core {
         st.viewers.get_mut(&id).unwrap().last_mut().unwrap().repaint_pending = false;
         conn.with(|out| {
             out.open_paused(channel);
-            if req.observe && req.resize_notifications {
+            if (req.observe || req.keep_size) && req.resize_notifications {
                 let t = &st.reg.terminals[&id];
                 let size = [t.cols.to_le_bytes(), t.rows.to_le_bytes()].concat();
                 out.resize(channel, &size);
@@ -335,7 +346,7 @@ impl Core {
         v.display.cell = display.cell.or(v.display.cell);
         let display = st.viewers[&id]
             .iter()
-            .filter(|v| !v.observe)
+            .filter(|v| v.sets_size())
             .max_by_key(|v| v.active_at)
             .filter(|v| Arc::ptr_eq(&v.conn, conn) && v.channel == channel)
             .map(|v| v.display.clone());
@@ -385,7 +396,12 @@ impl Core {
     /// The most recently active typing viewer sets size and display facts;
     /// with none, the terminal runs headless.
     fn apply_size(&self, st: &mut State, id: u32) {
-        let leader = st.viewers.get(&id).and_then(|vs| vs.iter().filter(|v| !v.observe).max_by_key(|v| v.active_at));
+        let viewers = st.viewers.get(&id);
+        let leader = viewers.and_then(|vs| vs.iter().filter(|v| v.sets_size()).max_by_key(|v| v.active_at));
+        // Only viewers that keep the size are left: the terminal stays as it is.
+        if leader.is_none() && viewers.is_some_and(|vs| vs.iter().any(|v| v.keep_size)) {
+            return;
+        }
         let (cols, rows) = leader.map_or_else(|| self.headless(), |v| v.size);
         let display = leader.map(|v| v.display.clone());
         if !st.screens.contains_key(&id) {

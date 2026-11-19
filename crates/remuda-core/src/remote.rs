@@ -28,6 +28,7 @@ use viewers::automatic_input;
 use viewers::{RESIZE_LOST, negotiate_resize, reattach};
 pub use viewers::{Relayed, attach, conn_gone, relay_in};
 
+mod remuda;
 #[cfg(test)]
 mod tests;
 

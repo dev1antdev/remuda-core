@@ -99,6 +99,14 @@ serialized only when the observer has credit. The attach reply precedes stream
 frames, including on core-to-core relays and reconnects.
 Without this opt-in, existing event-driven observers keep their previous output
 behavior: no additional resize paints or RESIZE frames.
+`keep_size: true` on `terminal.attach` is a viewer that types but never sets the size:
+attaching, typing, RESIZE and FOCUS leave it to the other viewers, and with only such
+viewers left the terminal keeps its size. It opts in to `resize_notifications` like an
+observer; with `observe` it is an observer. Cores advertise `keep_size` in `hello.features`;
+a relay refuses it towards a core that does not (`needs_update`), rather than let that core
+hand it the size, and a stream it reattaches over such a path closes with the error as its
+CLOSE reason (`{"error": …}`). Clients send it only to a core that lists it: an older core
+ignores the field and gives the viewer the size.
 
 Flow control: a stream starts with 256 KiB of credit. The viewer sends
 CREDIT for the bytes it has written out. A viewer that falls more than

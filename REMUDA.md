@@ -39,7 +39,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `scripts/rebrand.sh` puts them in.
 - **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
-  add, listed below (`terminal.keys`'s `now`).
+  add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`).
 
 ## Keeping upstream's fixes applying
 
@@ -67,6 +67,15 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `interrupt` does: behind a `keys` call already waiting there for that pause (`api/types.rs`,
   `input.rs`, `api.rs`, a line in `src/SKILL.md`, the generated docs and schema; the tests are ours,
   `tests/remuda.rs`). A core older than this on an added machine ignores `now` and waits as before.
+- `terminal.attach` takes `keep_size`: a viewer that types but never sets the terminal's size,
+  and leaves it as it is when no other viewer sets it (`api/types.rs`, `api.rs` with its
+  `keep_size` feature in hello, `viewers.rs`, `remote/viewers.rs` calling our
+  `remote/remuda.rs`, which refuses it towards a core without that feature and holds its test;
+  a reattach that any core on the path refuses as `needs_update` now ends after the queued output
+  with that error as its CLOSE reason,
+  `remote.rs` declaring that module, a paragraph in `schema/README.md`, the generated schema,
+  `keep_size: false` in the `AttachRequest` literals of `src/runtime/tests.rs` and
+  `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
