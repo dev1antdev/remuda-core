@@ -5,15 +5,13 @@ use crate::runtime::Core;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// How `terminal.read` gives the text.
+/// How `terminal.read` gives the text: plain, or vt (rows that each start with a
+/// style reset and hold their text, colors and attributes as SGR, nothing else).
 #[derive(Clone, Copy, PartialEq, Debug, Default, clap::ValueEnum, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ReadFormat {
-    /// Plain text.
     #[default]
     Plain,
-    /// Rows that each start with a style reset and hold their text, colors and
-    /// attributes as SGR, nothing else.
     Vt,
 }
 

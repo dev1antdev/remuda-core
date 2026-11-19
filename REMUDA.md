@@ -83,7 +83,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   Ours: `ghostty-vt/src/styled.rs` (`styled_rows`, with its tests) and `remuda-core/src/styled.rs`
   (`ReadFormat`, the read); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
   `pub mod styled;` in `lib.rs`, the param in `api/types.rs`, its branch in `api.rs`, the default
-  in `api/run.rs`, the generated docs and schema; the test is ours, in `tests/remuda.rs`.
+  in `api/run.rs`, the generated docs and schema; the test is ours, in `tests/remuda.rs`. A core
+  older than this on an added machine ignores `format` and answers plain text (no row starts with
+  `ESC[0m`).
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

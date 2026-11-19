@@ -703,19 +703,12 @@
         "type": "object"
       },
       "ReadFormat": {
-        "description": "How `terminal.read` gives the text.",
-        "oneOf": [
-          {
-            "const": "plain",
-            "description": "Plain text.",
-            "type": "string"
-          },
-          {
-            "const": "vt",
-            "description": "Rows that each start with a style reset and hold their text, colors and\nattributes as SGR, nothing else.",
-            "type": "string"
-          }
-        ]
+        "description": "How `terminal.read` gives the text: plain, or vt (rows that each start with a\nstyle reset and hold their text, colors and attributes as SGR, nothing else).",
+        "enum": [
+          "plain",
+          "vt"
+        ],
+        "type": "string"
       },
       "ReadResult": {
         "properties": {
