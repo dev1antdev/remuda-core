@@ -67,3 +67,15 @@ fn a_viewer_that_keeps_the_size_types_without_taking_it() {
     drop(phone);
     wait_until("headless again", || get(&s, &t)["cols"] == 200);
 }
+
+#[test]
+fn an_observer_asking_to_keep_the_size_is_an_observer() {
+    let s = session("0");
+    let t = bytes(&s);
+    let mut desk = Viewer::attach(&s, &t, 100, 30, json!({}));
+    let _watching = Viewer::attach(&s, &t, 40, 20, json!({"observe": true, "keep_size": true}));
+    assert_eq!(get(&s, &t)["cols"], 100);
+    desk.conn.send(desk.channel, wire::CLOSE, &[]);
+    desk.until("detached", |v| v.closed.is_some());
+    wait_until("headless with only an observer left", || get(&s, &t)["cols"] == 200);
+}

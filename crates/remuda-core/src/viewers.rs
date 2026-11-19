@@ -95,7 +95,7 @@ impl Core {
             conn: conn.clone(),
             channel,
             observe: req.observe,
-            keep_size: req.keep_size,
+            keep_size: req.keep_size && !req.observe,
             resize_notifications: (req.observe || req.keep_size) && req.resize_notifications,
             repaint_pending: false,
             size: req.size,

@@ -4,7 +4,8 @@ use super::*;
 
 /// A viewer that types without setting the size, on a machine whose core would set it anyway.
 pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Option<RpcError> {
-    (params["keep_size"] == true && !line.features.iter().any(|f| f == "keep_size")).then(|| {
+    let asked = params["keep_size"] == true && params["observe"] != true;
+    (asked && !line.features.iter().any(|f| f == "keep_size")).then(|| {
         RpcError::new(
             "needs_update",
             format!("{}'s rc is older and can't keep the size for a viewer that types", m.name),
@@ -13,14 +14,26 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
     })
 }
 
+/// The CLOSE reason of a relayed stream a core on its path is too old for.
+pub(super) fn too_old(e: &RpcError) -> Vec<u8> {
+    json!({"error": e.to_json()}).to_string().into_bytes()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::paths::Paths;
 
+    #[derive(Clone, Copy, PartialEq)]
+    enum Path {
+        Supported,
+        OldHere,
+        OldFurther,
+    }
+
     #[tokio::test]
-    async fn a_viewer_that_keeps_the_size_goes_only_to_a_core_that_can() {
-        for feature in [false, true] {
+    async fn a_viewer_that_keeps_the_size_goes_only_to_cores_that_can() {
+        for path in [Path::Supported, Path::OldHere, Path::OldFurther] {
             let root = crate::test_tmp().join(format!(
                 "rc-keep-size-{}-{}",
                 std::process::id(),
@@ -60,21 +73,34 @@ mod tests {
                     params: json!({"terminal": "t1", "keep_size": true}),
                 },
             );
+            let features = if path == Path::OldHere { json!([]) } else { json!(["keep_size"]) };
             let (frames, mut rx) = mpsc::unbounded_channel();
-            let line = Line::new(frames, &json!({"features": if feature { vec!["keep_size"] } else { vec![] }}));
+            let line = Line::new(frames, &json!({"features": features}));
             let task = tokio::spawn(reattach(core.clone(), machine, line.clone()));
-            if feature {
+            if path == Path::OldHere {
+                task.await.unwrap();
+                assert!(rx.try_recv().is_err(), "asked a core that would take the size");
+            } else {
                 let request = rx.recv().await.unwrap();
                 let request: Value = serde_json::from_slice(&request[wire::HEADER..]).unwrap();
                 assert_eq!(request["params"]["keep_size"], true);
-                line.take_reply(json!({"id": request["id"], "result": {"channel": 10}}));
+                let answer = match path {
+                    Path::Supported => json!({"id": request["id"], "result": {"channel": 10}}),
+                    _ => {
+                        let older = RpcError::new("needs_update", "far's rc is older", "rc machine update far");
+                        json!({"id": request["id"], "error": older.to_json()})
+                    }
+                };
+                line.take_reply(answer);
                 task.await.unwrap();
-                assert!(core.lock().relayed.contains_key(&(conn_key(&conn), 7)));
-            } else {
-                task.await.unwrap();
-                assert!(rx.try_recv().is_err(), "asked a core that would take the size");
-                assert!(!core.lock().relayed.contains_key(&(conn_key(&conn), 7)));
-                assert_eq!(conn.outbox().next_frame().unwrap()[4], wire::CLOSE);
+            }
+            let relayed = core.lock().relayed.contains_key(&(conn_key(&conn), 7));
+            assert_eq!(relayed, path == Path::Supported);
+            if path != Path::Supported {
+                let close = conn.outbox().next_frame().unwrap();
+                assert_eq!(close[4], wire::CLOSE);
+                let reason: Value = serde_json::from_slice(&close[wire::HEADER..]).unwrap();
+                assert_eq!(reason["error"]["data"]["kind"], "needs_update", "{reason}");
             }
             drop(core);
             let _ = std::fs::remove_dir_all(root);
