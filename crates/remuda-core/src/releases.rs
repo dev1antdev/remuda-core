@@ -1,5 +1,5 @@
-//! Released builds on releases.herdr.dev: the list (`core/latest.json`, or
-//! `core/<version>/manifest.json` for one version) and its checked
+//! Released builds on our GitHub Releases: the list (`latest/download/manifest.json`, or
+//! `download/remuda-v<version>/manifest.json` for one version) and its checked
 //! downloads. curl, sha256sum/shasum (Windows: its own crypto) and tar do
 //! the work: no HTTP or crypto code in rc for something run this rarely.
 
@@ -24,13 +24,17 @@ pub struct Target {
 
 fn base() -> String {
     std::env::var("RC_RELEASES_URL")
-        .unwrap_or_else(|_| "https://releases.herdr.dev".into())
+        .unwrap_or_else(|_| "https://github.com/dev1antdev/remuda-core/releases".into())
         .trim_end_matches('/')
         .into()
 }
 
 fn unavailable(why: String) -> RpcError {
-    RpcError::new("unavailable", why, "check your connection; the releases are at releases.herdr.dev")
+    RpcError::new(
+        "unavailable",
+        why,
+        "check your connection; the releases are at github.com/dev1antdev/remuda-core/releases",
+    )
 }
 
 fn curl(url: &str, to: &Path) -> Result<(), RpcError> {
@@ -50,8 +54,8 @@ fn curl(url: &str, to: &Path) -> Result<(), RpcError> {
 /// The latest release's list, or one version's.
 pub fn manifest(version: Option<&str>, scratch: &Path) -> Result<Manifest, RpcError> {
     let url = match version {
-        Some(v) => format!("{}/core/{v}/manifest.json", base()),
-        None => format!("{}/core/latest.json", base()),
+        Some(v) => format!("{}/download/remuda-v{v}/manifest.json", base()),
+        None => format!("{}/latest/download/manifest.json", base()),
     };
     let file = scratch.join("manifest.json");
     curl(&url, &file)?;

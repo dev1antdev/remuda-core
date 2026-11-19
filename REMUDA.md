@@ -17,15 +17,18 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **Commits** keep upstream's lowercase conventional subject, may carry a body and may end with a
   `Co-Authored-By:` trailer for the agent that wrote them: AGENTS.md's "single line, no AI co-author
   lines" does not hold here.
-- **Releases** are ours, tagged `remuda-v*` on a version line of our own. Upstream's
-  `.github/workflows/release.yml` signs with Herdr's secrets and publishes to Herdr's servers: it
-  stays disabled, never enable it. CHANGELOG.md is upstream's history; our releases do not go in it.
+- **Releases** are ours, on this repository's GitHub Releases, which `rc update`, the installers and
+  `rc machine add` read. The owner runs `scripts/release X.Y.Z` on master: it sets the version, marks
+  the API as released, pushes, waits for CI and tags `remuda-vX.Y.Z`, and
+  `.github/workflows/remuda-release.yml` builds the five targets and publishes them. The version line
+  is our own: it begins at 0.2.0, a patch for each of our releases, a minor for each upstream merge.
+  macOS builds are signed ad-hoc (no Apple Developer ID): macOS asks again for its privacy access
+  after each update. Windows builds are unsigned. Upstream's `.github/workflows/release.yml` signs
+  with Herdr's secrets and publishes to Herdr's servers: it stays disabled, never enable it.
+  CHANGELOG.md is upstream's history; our release notes are GitHub's, from the pull requests.
 - **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
   variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
-  `scripts/rebrand.sh` puts them in. Until our release setup lands, `rc update`, the installers and
-  `rc machine add` to a machine of another OS or CPU do not work: they look for our names in Herdr's
-  release archives and for our bundle id under Herdr's signature, and refuse before installing
-  anything. Leave them to the release setup.
+  `scripts/rebrand.sh` puts them in.
 - **The API** differs from herdr-core's in names alone: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables.
 
@@ -41,9 +44,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - Every file upstream's names reach, renamed and moved by `scripts/rebrand.sh`, which also points
   CI's upgrade test at our `remuda-v*` tags. A file of ours that names upstream on purpose goes on
   the script's list of exclusions.
-- `AGENTS.md`, `README.md`: one line each pointing here; README's Install says to build from source
-  until our releases exist.
+- `AGENTS.md`, `README.md`: one line each pointing here; README's Install names our installers.
 - `scripts/install-local.sh`: makes the `rc` link only when no other `rc` is on PATH.
+- Our releases' addresses and their check: `crates/remuda-core/src/releases.rs` (the GitHub layout,
+  `latest/download` and `download/remuda-v<version>`), `distribution/install.sh` and `install.ps1`,
+  `scripts/manifest`, the tests' fake releases, and the ad-hoc signature accepted in
+  `platform/mod.rs`, `platform/macos_bundle.rs` and `install.sh`; `docs/security.md` says so.
 
 ## Taking upstream's changes
 

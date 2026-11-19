@@ -1,0 +1,40 @@
+#!/bin/sh
+# Our release, run by the owner on master (REMUDA.md):
+#
+#   scripts/release 0.2.0
+#
+# Sets the version, marks the API as released, commits, pushes master, waits for its CI, then
+# tags remuda-v<version>; the tag starts .github/workflows/remuda-release.yml. Red CI tags nothing.
+set -eu
+version=${1:?usage: scripts/release <version>}
+tag=remuda-v$version
+repo=dev1antdev/remuda-core
+fail() { echo "release: $*" >&2; exit 1; }
+cd "$(git rev-parse --show-toplevel)"
+
+[ -z "$(git status --porcelain)" ] || fail "the working tree must be clean"
+[ "$(git branch --show-current)" = master ] || fail "release from master"
+git fetch origin master --tags
+git merge-base --is-ancestor origin/master HEAD || fail "behind origin/master"
+if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then fail "$tag already exists"; fi
+
+sed -i.bak "s/^version = \".*\"/version = \"$version\"/" crates/remuda-core/Cargo.toml
+rm -f crates/remuda-core/Cargo.toml.bak
+RC_UPDATE_SCHEMA=1 cargo test -p remuda-core --test m0
+cp schema/rc.openrpc.json schema/released.openrpc.json
+git add Cargo.lock crates/remuda-core/Cargo.toml schema
+git commit -m "chore: release $version"
+git push origin HEAD:master
+
+sha=$(git rev-parse HEAD)
+run=
+for _ in $(seq 60); do
+  run=$(gh run list --repo "$repo" --workflow ci --commit "$sha" --json databaseId -q '.[0].databaseId')
+  [ -z "$run" ] || break
+  sleep 5
+done
+[ -n "$run" ] || fail "no CI run for $sha"
+gh run watch "$run" --repo "$repo" --exit-status --interval 30 || fail "CI failed on $sha: nothing tagged"
+git tag -a "$tag" -m "remuda-core $version"
+git push origin "$tag"
+echo "$tag tagged: .github/workflows/remuda-release.yml builds and publishes it"
