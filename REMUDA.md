@@ -96,10 +96,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   watches, 1 to 200 rows, 4 KB a pattern; `invalid_regex` names the watch; a terminal on another
   machine is refused. Ours: `remuda-core/src/watches.rs` (the watches, a task per subscription
   looking every 250 ms at the terminals that printed) and `recent_rows` in
-  `ghostty-vt/src/styled.rs`; in upstream's files the param in `api/types.rs`, the compile and
+  `ghostty-vt/src/styled.rs` (the last rows' text with soft wraps joined, as `plain_text` reads it);
+  in upstream's files `#[derive(Clone)]` on `Sink` in `events.rs`, the param in `api/types.rs`, the compile and
   start in `api.rs`'s `events_subscribe` with its errors, description and the feature,
   `pub mod watches;` in `lib.rs`, `regex` in `remuda-core/Cargo.toml` and `Cargo.lock`, the
-  regenerated `THIRD-PARTY-NOTICES` and schema; the tests are ours, in `watches.rs`,
+  regenerated `THIRD-PARTY-NOTICES` and schema, the `output` row and a paragraph in
+  `schema/README.md`; the tests are ours, in `watches.rs`,
   `styled.rs` and `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.

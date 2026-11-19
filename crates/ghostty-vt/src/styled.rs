@@ -6,6 +6,8 @@ use crate::{Terminal, ffi};
 use std::ffi::c_void;
 
 const RESET: &str = "\x1b[0m";
+/// Grid rows counted from the oldest kept, history then screen.
+const SCREEN: i32 = 2;
 const WIDE: i32 = 3;
 const SPACER_TAIL: i32 = 2;
 const CONTENT_TAG: i32 = 2;
@@ -79,30 +81,21 @@ impl Terminal {
         (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
     }
 
-    /// The last `n` rows as plain text, oldest first, trailing spaces cut: the
-    /// screen down to its last row with text, then history above it (main screen only).
+    /// The text of the last `n` rows (the screen down to its last row with text,
+    /// then history above it on the main screen), oldest first, as `plain_text`
+    /// reads it: soft-wrapped rows joined, trailing spaces cut.
     pub fn recent_rows(&self, n: usize) -> Vec<String> {
-        let mut screen: Vec<String> = self.screen_rows().iter().map(|r| r.trim_end().to_string()).collect();
-        while screen.last().is_some_and(String::is_empty) {
-            screen.pop();
+        let shown = self.screen_rows().iter().rposition(|r| !r.trim().is_empty()).map_or(0, |i| i + 1);
+        let above = if self.alt_screen() { 0 } else { self.history_rows() };
+        let bottom = above + shown as u32;
+        let top = bottom.saturating_sub(u32::try_from(n).unwrap_or(u32::MAX));
+        if top == bottom {
+            return Vec::new();
         }
-        let available = if self.alt_screen() { 0 } else { self.history_rows() };
-        let wanted = u32::try_from(n.saturating_sub(screen.len())).unwrap_or(u32::MAX).min(available);
         let last = self.size().0.saturating_sub(1);
-        let history = (wanted > 0)
-            .then(|| self.select(ffi::POINT_HISTORY, (0, available - wanted), (last, available - 1)))
-            .flatten()
-            .map(|sel| {
-                String::from_utf8_lossy(&self.format_with(ffi::FORMAT_PLAIN, Some(&sel), false, false)).into_owned()
-            });
-        let mut rows: Vec<String> = history
-            .iter()
-            .flat_map(|h| h.split('\n'))
-            .take(wanted as usize)
-            .map(|r| r.trim_end().to_string())
-            .collect();
-        rows.extend(screen);
-        rows.split_off(rows.len().saturating_sub(n))
+        let Some(window) = self.select(SCREEN, (0, top), (last, bottom - 1)) else { return Vec::new() };
+        let text = self.format_with(ffi::FORMAT_PLAIN, Some(&window), false, true);
+        String::from_utf8_lossy(&text).split('\n').map(str::to_string).collect()
     }
 
     fn styled_row(&self, tag: i32, y: u32, cols: u16) -> String {
@@ -285,6 +278,13 @@ mod tests {
         assert_eq!(t.recent_rows(9), ["one", "two", "three", "four", "five"]);
         t.write(b"\x1b[?1049h\x1b[Hfull");
         assert_eq!(t.recent_rows(9), ["full"], "a full-screen program: its screen alone");
+    }
+
+    #[test]
+    fn a_wrapped_line_is_one_recent_row() {
+        let mut t = Terminal::new(10, 4, 1 << 20);
+        t.write(b"first\r\nabcdefghijklmnopqrstuvwxyz");
+        assert_eq!(t.recent_rows(4), ["first", "abcdefghijklmnopqrstuvwxyz"]);
     }
 
     #[test]

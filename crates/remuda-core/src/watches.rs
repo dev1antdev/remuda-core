@@ -5,13 +5,12 @@
 use crate::events::{Filter, Sink};
 use crate::rpc::RpcError;
 use crate::runtime::Core;
-use crate::wire::Conn;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::sync::mpsc;
 
@@ -28,9 +27,10 @@ pub struct OutputWatch {
     /// A terminal here (`t7` or a name); for another machine's, subscribe to its core.
     pub terminal: String,
     #[serde(rename = "match")]
-    pub find: Match,
+    pub find: OutputMatch,
     /// How many of its last rows it looks at, 1 to 200 (default 40).
     #[serde(default = "default_lines")]
+    #[schemars(range(min = 1, max = 200))]
     pub lines: usize,
 }
 
@@ -42,9 +42,9 @@ fn default_lines() -> usize {
 /// (Rust's `regex` syntax, `\d` and `\w` Unicode's).
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
 #[serde(tag = "type", content = "value", rename_all = "lowercase")]
-pub enum Match {
-    Substring(String),
-    Regex(String),
+pub enum OutputMatch {
+    Substring(#[schemars(length(max = 4096))] String),
+    Regex(#[schemars(length(max = 4096))] String),
 }
 
 pub struct Watch {
@@ -71,60 +71,53 @@ impl Find {
 }
 
 /// Checks and compiles the watches a subscription asks for.
-pub fn compile(asked: &[OutputWatch], resolve: impl Fn(&str) -> Result<u32, RpcError>) -> Result<Vec<Watch>, RpcError> {
+/// `far`: whether a name is a machine this core added (its terminals are watched by its own core).
+pub fn compile(
+    asked: &[OutputWatch],
+    resolve: impl Fn(&str) -> Result<u32, RpcError>,
+    far: impl Fn(&str) -> bool,
+) -> Result<Vec<Watch>, RpcError> {
     if asked.len() > MAX_WATCHES {
         return Err(RpcError::invalid_params(format!("{} output watches: at most {MAX_WATCHES}", asked.len())));
     }
-    asked.iter().map(|w| compile_one(w, &resolve)).collect()
+    asked.iter().map(|w| compile_one(w, &resolve, &far)).collect()
 }
 
-fn compile_one(w: &OutputWatch, resolve: impl Fn(&str) -> Result<u32, RpcError>) -> Result<Watch, RpcError> {
+fn compile_one(
+    w: &OutputWatch,
+    resolve: impl Fn(&str) -> Result<u32, RpcError>,
+    far: impl Fn(&str) -> bool,
+) -> Result<Watch, RpcError> {
     let id = &w.id;
     if !(1..=MAX_LINES).contains(&w.lines) {
         return Err(RpcError::invalid_params(format!("watch {id:?}: lines {} is not 1 to {MAX_LINES}", w.lines)));
     }
-    let (Match::Substring(pattern) | Match::Regex(pattern)) = &w.find;
+    let (OutputMatch::Substring(pattern) | OutputMatch::Regex(pattern)) = &w.find;
     if pattern.len() > MAX_PATTERN {
         return Err(RpcError::invalid_params(format!("watch {id:?}: its pattern is over {MAX_PATTERN} bytes")));
     }
-    if w.terminal.contains('/') {
+    if w.terminal.split_once('/').is_some_and(|(machine, _)| far(machine)) {
         return Err(RpcError::invalid_params(format!("watch {id:?}: {} is on another machine", w.terminal))
             .with_hint("subscribe to that machine's core for its terminals' output"));
     }
     let find = match &w.find {
-        Match::Substring(text) => Find::Text(text.clone()),
-        Match::Regex(re) => Find::Pattern(
+        OutputMatch::Substring(text) => Find::Text(text.clone()),
+        OutputMatch::Regex(re) => Find::Pattern(
             regex::Regex::new(re).map_err(|e| RpcError::new("invalid_regex", format!("watch {id:?}: {e}"), ""))?,
         ),
     };
     Ok(Watch { id: id.clone(), terminal: resolve(&w.terminal)?, lines: w.lines, find, seen: HashMap::new() })
 }
 
-/// Where a subscription's events go, kept beside the subscription itself.
-pub enum Reach {
-    Framed(Arc<Conn>, u32, Filter),
-    Plain(mpsc::Sender<String>, Arc<AtomicBool>),
-}
-
-impl Reach {
-    pub fn of(sink: &Sink, filter: &Filter) -> Option<Reach> {
-        match sink {
-            Sink::Framed { conn, channel } => Some(Reach::Framed(conn.clone(), *channel, filter.clone())),
-            Sink::Plain { tx, behind } => Some(Reach::Plain(tx.clone(), behind.clone())),
-            Sink::Waiter(_) => None,
-        }
-    }
-}
-
-/// Looks for the watches' matches while their subscription lasts.
-pub fn start(core: Arc<Core>, reach: Reach, mut watches: Vec<Watch>) {
-    if watches.is_empty() {
+/// Looks for the watches' matches while their subscription (`sink`, `filter`) lasts.
+pub fn start(core: Arc<Core>, sink: Sink, filter: Filter, mut watches: Vec<Watch>) {
+    if watches.is_empty() || matches!(sink, Sink::Waiter(_)) {
         return;
     }
     tokio::spawn(async move {
         let mut printed: HashMap<u32, u64> = HashMap::new();
         let mut fresh = true;
-        while look(&core, &reach, &mut watches, &mut printed, fresh) {
+        while look(&core, &sink, &filter, &mut watches, &mut printed, fresh) {
             fresh = false;
             tokio::time::sleep(EVERY).await;
         }
@@ -132,47 +125,59 @@ pub fn start(core: Arc<Core>, reach: Reach, mut watches: Vec<Watch>) {
 }
 
 /// One look at the terminals that printed since the last; false once the subscription is gone.
-fn look(core: &Core, reach: &Reach, watches: &mut [Watch], printed: &mut HashMap<u32, u64>, fresh: bool) -> bool {
+fn look(
+    core: &Core,
+    sink: &Sink,
+    filter: &Filter,
+    watches: &mut [Watch],
+    printed: &mut HashMap<u32, u64>,
+    fresh: bool,
+) -> bool {
     let mut st = core.lock();
-    let alive = match reach {
-        Reach::Framed(conn, channel, _) => core.subscribed(&st, conn, *channel),
-        Reach::Plain(tx, _) => !tx.is_closed(),
+    let alive = match sink {
+        Sink::Framed { conn, channel } => core.subscribed(&st, conn, *channel),
+        Sink::Plain { tx, .. } => !tx.is_closed(),
+        Sink::Waiter(_) => false,
     };
     if !alive {
         return false;
     }
-    let mut rows: HashMap<u32, Vec<String>> = HashMap::new();
-    for w in watches.iter() {
-        let now = st.output_seq.get(&w.terminal).copied().unwrap_or_default();
-        if (fresh || printed.get(&w.terminal) != Some(&now))
-            && let Some(screen) = st.screens.get(&w.terminal)
-        {
-            let most = watches.iter().filter(|o| o.terminal == w.terminal).map(|o| o.lines).max().unwrap_or(w.lines);
-            rows.entry(w.terminal).or_insert_with(|| screen.recent_rows(most));
-        }
-        printed.insert(w.terminal, now);
-    }
+    let moved: Vec<u32> = watches
+        .iter()
+        .map(|w| w.terminal)
+        .filter(|id| {
+            let now = st.output_seq.get(id).copied().unwrap_or_default();
+            fresh || printed.insert(*id, now) != Some(now)
+        })
+        .collect();
+    let mut rows: HashMap<(u32, usize), Vec<String>> = HashMap::new();
     let mut events = Vec::new();
-    for w in watches.iter_mut() {
-        let Some(rows) = rows.get(&w.terminal) else { continue };
+    for w in watches.iter_mut().filter(|w| moved.contains(&w.terminal)) {
+        let Some(screen) = st.screens.get(&w.terminal) else { continue };
+        let lines = rows.entry((w.terminal, w.lines)).or_insert_with(|| screen.recent_rows(w.lines));
         let mut now: HashMap<String, usize> = HashMap::new();
-        for row in rows.iter().skip(rows.len().saturating_sub(w.lines)).filter(|r| w.find.matches(r)) {
-            *now.entry(row.clone()).or_default() += 1;
+        for line in lines.iter().filter(|l| w.find.matches(l)) {
+            *now.entry(line.clone()).or_default() += 1;
         }
-        for (row, &count) in &now {
-            for _ in w.seen.get(row).copied().unwrap_or_default()..count {
+        for (line, &count) in &now {
+            for _ in w.seen.get(line).copied().unwrap_or_default()..count {
                 events.push(json!({"type": "output", "terminal": crate::terminals::address(w.terminal),
-                    "data": {"watch": w.id, "line": row, "fresh": fresh}}));
+                    "data": {"watch": w.id, "line": line, "fresh": fresh}}));
             }
         }
         w.seen = now;
+    }
+    if fresh {
+        for w in watches.iter() {
+            printed.insert(w.terminal, st.output_seq.get(&w.terminal).copied().unwrap_or_default());
+        }
     }
     for mut params in events {
         st.events.seq += 1;
         params["seq"] = st.events.seq.into();
         let line = format!("{}\n", json!({"jsonrpc": "2.0", "method": "event", "params": params}));
-        match reach {
-            Reach::Framed(conn, channel, filter) => {
+        match sink {
+            Sink::Framed { conn, channel } => {
                 let missed = || {
                     format!("{}\n", json!({"jsonrpc": "2.0", "method": "missed", "params": core.snapshot(&st, filter)}))
                 };
@@ -182,11 +187,12 @@ fn look(core: &Core, reach: &Reach, watches: &mut [Watch], printed: &mut HashMap
                     }
                 });
             }
-            Reach::Plain(tx, behind) => {
+            Sink::Plain { tx, behind } => {
                 if let Err(mpsc::error::TrySendError::Full(_)) = tx.try_send(line) {
                     behind.store(true, Ordering::SeqCst);
                 }
             }
+            Sink::Waiter(_) => {}
         }
     }
     true
@@ -196,25 +202,30 @@ fn look(core: &Core, reach: &Reach, watches: &mut [Watch], printed: &mut HashMap
 mod tests {
     use super::*;
 
-    fn watch(find: Match, lines: usize) -> OutputWatch {
+    fn watch(find: OutputMatch, lines: usize) -> OutputWatch {
         OutputWatch { id: "w".into(), terminal: "t1".into(), find, lines }
     }
 
     #[test]
     fn a_regex_reads_digits_and_words_as_unicode_does() {
-        let w = compile(&[watch(Match::Regex(r"^\d+ failed$".into()), 40)], |_| Ok(1)).unwrap();
+        let w = compile(&[watch(OutputMatch::Regex(r"^\d+ failed$".into()), 40)], |_| Ok(1), |_| false).unwrap();
         assert!(w[0].find.matches("٣ failed") && !w[0].find.matches("x failed"));
     }
 
     #[test]
     fn what_a_subscription_cannot_watch_is_refused_by_name() {
-        let refused = |asked: &[OutputWatch]| compile(asked, |_| Ok(1)).err().map(|e| e.kind);
-        assert_eq!(refused(&[watch(Match::Regex("(".into()), 40)]).as_deref(), Some("invalid_regex"));
-        assert_eq!(refused(&[watch(Match::Substring("x".into()), 0)]).as_deref(), Some("invalid_params"));
-        assert_eq!(refused(&[watch(Match::Substring("x".into()), 201)]).as_deref(), Some("invalid_params"));
-        assert_eq!(refused(&[watch(Match::Substring("x".repeat(4097)), 40)]).as_deref(), Some("invalid_params"));
-        assert_eq!(refused(&vec![watch(Match::Substring("x".into()), 40); 257]).as_deref(), Some("invalid_params"));
-        let far = OutputWatch { terminal: "rohan/t1".into(), ..watch(Match::Substring("x".into()), 40) };
+        let refused = |asked: &[OutputWatch]| compile(asked, |_| Ok(1), |m| m == "rohan").err().map(|e| e.kind);
+        assert_eq!(refused(&[watch(OutputMatch::Regex("(".into()), 40)]).as_deref(), Some("invalid_regex"));
+        assert_eq!(refused(&[watch(OutputMatch::Substring("x".into()), 0)]).as_deref(), Some("invalid_params"));
+        assert_eq!(refused(&[watch(OutputMatch::Substring("x".into()), 201)]).as_deref(), Some("invalid_params"));
+        assert_eq!(refused(&[watch(OutputMatch::Substring("x".repeat(4097)), 40)]).as_deref(), Some("invalid_params"));
+        assert_eq!(
+            refused(&vec![watch(OutputMatch::Substring("x".into()), 40); 257]).as_deref(),
+            Some("invalid_params")
+        );
+        let far = OutputWatch { terminal: "rohan/t1".into(), ..watch(OutputMatch::Substring("x".into()), 40) };
         assert_eq!(refused(&[far]).as_deref(), Some("invalid_params"));
+        let here = OutputWatch { terminal: "box/t1".into(), ..watch(OutputMatch::Substring("x".into()), 40) };
+        assert_eq!(refused(&[here]), None, "this core's own name is for resolve to read");
     }
 }

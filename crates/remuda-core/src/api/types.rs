@@ -468,6 +468,7 @@ pub struct SubscribeParams {
     /// matching it is an `output` event (`fresh` for the rows already there).
     #[arg(skip)]
     #[serde(default)]
+    #[schemars(length(max = 256))]
     pub output: Vec<crate::watches::OutputWatch>,
 }
 

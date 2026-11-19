@@ -601,7 +601,8 @@ async fn events_subscribe(core: Ctx<'_>, p: SubscribeParams) -> Result<Subscribe
     let terminal = p.terminal.as_deref().map(address).transpose()?;
     let children_of = p.children_of.as_deref().map(address).transpose()?;
     let filter = Filter { terminal, children_of, labels: labels(&p.labels), here_only: from_afar(core) };
-    let watches = crate::watches::compile(&p.output, |t| resolve(core, t))?;
+    let added = |m: &str| core.lock().machines.iter().any(|x| x.name == m);
+    let watches = crate::watches::compile(&p.output, |t| resolve(core, t), added)?;
     let (sink, channel) = match (core.conn, core.plain) {
         (Some(conn), _) => {
             let channel = conn.new_channel();
@@ -617,16 +618,14 @@ async fn events_subscribe(core: Ctx<'_>, p: SubscribeParams) -> Result<Subscribe
         }
         (None, None) => return Err(RpcError::internal("no connection to deliver events on")),
     };
-    let reach = crate::watches::Reach::of(&sink, &filter);
+    let watching = (sink.clone(), filter.clone());
     let (seq, terminals) = {
         let mut st = core.lock();
         let terminals = core.matching(&st, &filter);
         core.subscribe(&mut st, filter, sink);
         (st.events.seq, terminals)
     };
-    if let Some(reach) = reach {
-        crate::watches::start(core.core.clone(), reach, watches);
-    }
+    crate::watches::start(core.core.clone(), watching.0, watching.1, watches);
     if let Some(channel) = channel {
         crate::server::heartbeat(core.core.clone(), core.conn.expect("framed").clone(), channel);
     }

@@ -44,6 +44,7 @@ fn record(t: &Terminal) -> Value {
     json!(crate::terminals::Public(t.clone()))
 }
 
+#[derive(Clone)]
 pub enum Sink {
     Framed {
         conn: Arc<Conn>,

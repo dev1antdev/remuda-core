@@ -684,7 +684,7 @@
         ],
         "type": "object"
       },
-      "Match": {
+      "OutputMatch": {
         "description": "What a row must hold: a piece of text, or a match of a regular expression\n(Rust's `regex` syntax, `\\d` and `\\w` Unicode's).",
         "oneOf": [
           {
@@ -694,6 +694,7 @@
                 "type": "string"
               },
               "value": {
+                "maxLength": 4096,
                 "type": "string"
               }
             },
@@ -710,6 +711,7 @@
                 "type": "string"
               },
               "value": {
+                "maxLength": 4096,
                 "type": "string"
               }
             },
@@ -732,11 +734,12 @@
             "default": 40,
             "description": "How many of its last rows it looks at, 1 to 200 (default 40).",
             "format": "uint",
-            "minimum": 0,
+            "maximum": 200,
+            "minimum": 1,
             "type": "integer"
           },
           "match": {
-            "$ref": "#/components/schemas/Match"
+            "$ref": "#/components/schemas/OutputMatch"
           },
           "terminal": {
             "description": "A terminal here (`t7` or a name); for another machine's, subscribe to its core.",
@@ -3805,6 +3808,7 @@
             "items": {
               "$ref": "#/components/schemas/OutputWatch"
             },
+            "maxItems": 256,
             "type": "array"
           }
         },
