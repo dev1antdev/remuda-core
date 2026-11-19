@@ -70,7 +70,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - `terminal.attach` takes `keep_size`: a viewer that types but never sets the terminal's size,
   and leaves it as it is when no other viewer sets it (`api/types.rs`, `api.rs` with its
   `keep_size` feature in hello, `viewers.rs`, `remote/viewers.rs` calling our
-  `remote/remuda.rs`, which refuses it towards a core without that feature and holds its test,
+  `remote/remuda.rs`, which refuses it towards a core without that feature and holds its test;
+  a reattach that any core on the path refuses as `needs_update` now ends after the queued output
+  with that error as its CLOSE reason,
   `remote.rs` declaring that module, a paragraph in `schema/README.md`, the generated schema,
   `keep_size: false` in the `AttachRequest` literals of `src/runtime/tests.rs` and
   `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
