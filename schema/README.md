@@ -159,7 +159,7 @@ They are read four times a second, so a row that passes through faster may be
 missed. Rows seen wait in their watch's queue and are told one at a time from
 each watch in turn, at most 256 (1 MB) a look; past 1000 rows or 64 KB still
 waiting after a look, a watch drops its oldest (never its newest) and its next row
-carries `lost`. A terminal that
+carries `lost`. A row over 64 KB is told cut to its first 64 KB. A terminal that
 finished, or a kept one between shells, is looked at in the screen it left; one
 removed meanwhile (`--rm`) is not. Output
 events go only to the subscription that set the watches, whatever its

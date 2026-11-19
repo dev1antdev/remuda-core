@@ -25,6 +25,8 @@ const BYTES_PER_LOOK: usize = 1 << 20;
 /// Rows a watch keeps waiting to be told, past which the oldest go (and are told as lost).
 const MAX_PENDING: usize = 1000;
 const MAX_PENDING_BYTES: usize = 64 << 10;
+/// A row told is cut to this, so any one fits a look whatever else waits.
+const MAX_LINE: usize = 64 << 10;
 
 /// A watch on a terminal's last rows.
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug)]
@@ -255,8 +257,9 @@ fn observe(w: &mut Watch, lines: &[String]) {
         let count = standing.entry(line.clone()).or_default();
         *count += 1;
         if *count > w.seen.get(line).copied().unwrap_or_default() {
-            w.pending_bytes += line.len();
-            w.pending.push_back((line.clone(), fresh));
+            let told = line[..line.floor_char_boundary(MAX_LINE)].to_string();
+            w.pending_bytes += told.len();
+            w.pending.push_back((told, fresh));
         }
     }
     w.seen = standing;
@@ -396,7 +399,19 @@ mod tests {
         assert!(tell(&mut w, 0, &mut Budget { events: 0, bytes: 1 << 20 }).is_empty());
         trim(&mut w[0]);
         let events = tell(&mut w, 0, &mut Budget { events: 1, bytes: 1 << 20 });
-        assert_eq!(events[0]["data"]["line"], json!(report));
+        assert!(report.starts_with(events[0]["data"]["line"].as_str().unwrap()), "told, cut to MAX_LINE");
+    }
+
+    #[test]
+    fn a_row_too_long_for_any_look_is_told_cut() {
+        let mut ws = [fail_watch(), fail_watch()];
+        let huge = format!("FAIL {}", "é".repeat(BYTES_PER_LOOK));
+        observe(&mut ws[0], &lines(&[&huge]));
+        observe(&mut ws[1], &lines(&["server FAIL"]));
+        let events = tell(&mut ws, 0, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
+        let line = events[0]["data"]["line"].as_str().unwrap();
+        assert!(line.len() <= MAX_LINE && huge.starts_with(line));
+        assert_eq!(events[1]["data"]["line"], "server FAIL", "the other watch is not held up");
     }
 
     #[test]

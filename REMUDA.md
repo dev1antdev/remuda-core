@@ -95,7 +95,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   crate, Unicode `\d` and `\w`) is an `output` event, the rows already there `fresh`; at most 256
   watches, 1 to 200 rows, 4 KB a pattern, 256 bytes an id; rows seen wait in their watch's queue
   and are told in turn across watches, 256 events (1 MB) a look; what still waits past 1000 rows
-  or 64 KB loses its oldest (never its newest), counted as `lost` on the next row told; a terminal without a live screen (finished, or kept between shells) is read from
+  or 64 KB loses its oldest (never its newest), counted as `lost` on the next row told; a row is
+  told cut to 64 KB; a terminal without a live screen (finished, or kept between shells) is read from
   its snapshot; `invalid_regex` names the
   watch; a terminal on another machine is refused. Ours: `remuda-core/src/watches.rs` (the watches, a task per subscription
   looking every 250 ms at the terminals that printed) and `recent_rows` in
