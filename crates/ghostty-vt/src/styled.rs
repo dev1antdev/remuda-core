@@ -11,7 +11,7 @@ impl Terminal {
     pub fn styled_rows(&self, history: usize) -> Vec<String> {
         let (cols, rows) = self.size();
         let available = if self.alt_screen() { 0 } else { self.history_rows() };
-        let from = available.saturating_sub(history as u32);
+        let from = available.saturating_sub(u32::try_from(history).unwrap_or(u32::MAX));
         let history = (from..available).map(|y| self.styled_row(ffi::POINT_HISTORY, y, cols));
         history.chain((0..rows as u32).map(|y| self.styled_row(ffi::POINT_ACTIVE, y, cols))).collect()
     }
