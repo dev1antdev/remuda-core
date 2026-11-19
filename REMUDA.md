@@ -79,10 +79,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
 - `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
   colors as SGR, each starting with a style reset, history above the screen on the main screen
-  only (a full-screen program is not scrolled for it) and only the newest rows whose JSON fits half
-  a frame; a finished terminal answers its plain text. The rows are encoded cell by cell from
-  libghostty-vt's cell styles (its formatter drops a blank cell's background); the underline color
-  is left out. Ours: `ghostty-vt/src/styled.rs` (`styled_screen`, `styled_history`, with their
+  only (a full-screen program is not scrolled for it), at most 1000 rows and only the newest whose
+  JSON fits half a frame; a finished terminal answers its plain text. The rows are encoded cell by cell from
+  libghostty-vt's cell styles (its formatter drops a blank cell's background), a row walked along
+  its page from its first cell; the underline color is left out. Ours: `ghostty-vt/src/styled.rs` (`styled_screen`, `styled_history`, with their
   tests) and `remuda-core/src/styled.rs` (`ReadFormat`, the read and its budget, `rc read`'s notes
   on stderr for vt); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
   `pub mod styled;` in `lib.rs`, the param in `api/types.rs`, its branch in `api.rs`, the default

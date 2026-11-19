@@ -100,6 +100,21 @@ fn read_in_vt_gives_each_row_with_its_colors() {
 }
 
 #[test]
+fn rc_read_in_vt_leaves_a_programs_own_rc_lines_on_stdout() {
+    let s = session("0");
+    let t =
+        s.json(&["run", "--bg", "sh", "-c", "printf 'starting\\n[rc] build finished\\nartifact.zip\\n'"])["address"]
+            .as_str()
+            .unwrap()
+            .to_string();
+    wait_until("finished", || get(&s, &t)["state"] == "finished");
+    let out = s.rc(&["read", "--format", "vt", &t]);
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains("starting\n[rc] build finished\nartifact.zip"), "{stdout:?}");
+    assert!(out.stderr.is_empty(), "{}", String::from_utf8_lossy(&out.stderr));
+}
+
+#[test]
 fn read_in_vt_keeps_its_notes_off_the_rows() {
     let s = session("0");
     let program = "printf '\\033[?1049h\\033[31mfull'; sleep 100";

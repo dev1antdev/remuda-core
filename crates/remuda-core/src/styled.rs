@@ -18,15 +18,18 @@ pub enum ReadFormat {
 
 /// At most this much JSON, half a frame: a reply past a frame ends the line it travels on.
 const BUDGET: usize = crate::wire::MAX_PAYLOAD / 2;
+/// At most this many history rows: they are encoded under the core's lock.
+const HISTORY: usize = crate::api::FINISHED_LINES;
 
-/// The live screen with up to `lines` of history above it (main screen only, the
-/// newest that fit the budget), with colors. None for a finished terminal: what
+/// The live screen with up to `lines` of history above it (main screen only, at most
+/// `HISTORY` rows, the newest that fit the budget), with colors. None for a finished terminal: what
 /// it keeps has none.
 pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, RpcError>> {
     let st = core.lock();
     let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
     let full_screen = screen.alt_screen();
-    let Some((rows, kept, cut)) = fit(screen.styled_screen(), screen.styled_history().take(lines), BUDGET) else {
+    let Some((rows, kept, cut)) = fit(screen.styled_screen(), screen.styled_history().take(lines.min(HISTORY)), BUDGET)
+    else {
         let hint = "read it as plain text (no format)";
         return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
     };
@@ -67,14 +70,15 @@ fn fit(
     Some((rows, kept, false))
 }
 
-/// `rc read`'s text; for vt its own notes go to stderr, so stdout holds rows alone.
-pub fn print_read(text: &str, format: ReadFormat) {
-    match (format, text.split_once("\n[rc] ")) {
-        (ReadFormat::Vt, Some((rows, note))) => {
+/// `rc read`'s output: the terminal's `text` and the notes after it. For vt the
+/// notes go to stderr, so stdout holds the rows alone.
+pub fn print_read(output: &str, text: &str, format: ReadFormat) {
+    match output.split_at_checked(text.len()) {
+        Some((rows, notes)) if format == ReadFormat::Vt && !notes.is_empty() => {
             println!("{rows}");
-            eprintln!("[rc] {note}");
+            eprintln!("{}", notes.trim_start_matches('\n'));
         }
-        _ => println!("{text}"),
+        _ => println!("{output}"),
     }
 }
 

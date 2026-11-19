@@ -81,9 +81,15 @@ impl Terminal {
 
     fn styled_row(&self, tag: i32, y: u32, cols: u16) -> String {
         let mut row = String::from(RESET);
+        let Some(first) = self.grid_ref(tag, 0, y) else { return row };
+        // Finding a cell walks the page list; when the whole row sits in one page,
+        // move along it from its first cell instead.
+        let last = self.grid_ref(tag, cols.saturating_sub(1), y);
+        let one_page = last.is_some_and(|last| last.node == first.node && last.y == first.y);
         let (mut pen, mut blanks) = (String::new(), 0);
         for x in 0..cols {
-            let Some(at) = self.grid_ref(tag, x, y) else { break };
+            let found = if one_page { Some(ffi::GridRef { x, ..first }) } else { self.grid_ref(tag, x, y) };
+            let Some(at) = found else { break };
             let mut cell = 0u64;
             if unsafe { ghostty_grid_ref_cell(&at, &mut cell) } != ffi::SUCCESS {
                 break;
@@ -156,7 +162,7 @@ fn sgr(at: &ffi::GridRef, cell: u64) -> String {
         (style.bold, "1"),
         (style.faint, "2"),
         (style.italic, "3"),
-        (style.underline != 0, "4"),
+        (style.underline == 1, "4"),
         (style.blink, "5"),
         (style.inverse, "7"),
         (style.invisible, "8"),
@@ -164,6 +170,9 @@ fn sgr(at: &ffi::GridRef, cell: u64) -> String {
         (style.overline, "53"),
     ];
     let mut params: Vec<String> = flags.iter().filter(|(on, _)| *on).map(|(_, p)| (*p).into()).collect();
+    if style.underline > 1 {
+        params.push(format!("4:{}", style.underline));
+    }
     params.extend(color(38, style.fg));
     // A blank cell keeps its background in the cell itself.
     let bg = match cell_value::<i32>(cell, CONTENT_TAG) {
@@ -194,7 +203,7 @@ mod tests {
         row.split('\x1b').skip(1).all(|seq| {
             seq.strip_prefix('[')
                 .and_then(|s| s.split_once('m'))
-                .is_some_and(|(params, _)| params.bytes().all(|b| b.is_ascii_digit() || b == b';'))
+                .is_some_and(|(params, _)| params.bytes().all(|b| b.is_ascii_digit() || b == b';' || b == b':'))
         })
     }
 
@@ -223,6 +232,15 @@ mod tests {
         assert_eq!(rows[0], format!("\x1b[0m\x1b[0;48;5;1m{}\x1b[0m", " ".repeat(8)), "{rows:?}");
         assert_eq!(rows[1], "\x1b[0m\x1b[0;48;5;1mA\x1b[0m    B", "{rows:?}");
         assert_eq!(rows[2], format!("\x1b[0m\x1b[0;48;5;4m{}\x1b[0m", " ".repeat(8)), "blue is not red");
+    }
+
+    #[test]
+    fn each_underline_shape_reads_differently() {
+        let mut t = Terminal::new(8, 2, 1 << 20);
+        t.write(b"\x1b[4mword\x1b[0m\r\n\x1b[4:3mword");
+        let rows = t.styled_screen();
+        assert_eq!(rows[0], "\x1b[0m\x1b[0;4mword\x1b[0m");
+        assert_eq!(rows[1], "\x1b[0m\x1b[0;4:3mword\x1b[0m");
     }
 
     #[test]
