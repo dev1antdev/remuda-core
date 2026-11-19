@@ -123,11 +123,12 @@ jobs:
     if: >-
       github.event_name == 'push' && github.ref_type == 'tag'
       && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
-    # One publish at a time across tags, so the latest check below sees the one before. GitHub keeps one
-    # waiting: a third tag cancels the second's publish, which leaves no release (REMUDA.md: re-run it).
+    # One publish at a time across tags, so the latest check below sees the one before; every other
+    # one waits its turn (queue: max).
     concurrency:
       group: remuda-release-publish
       cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

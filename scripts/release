@@ -5,7 +5,8 @@
 #
 # Sets the version, marks the API as released, commits, pushes master, waits for that commit's CI,
 # then tags that very commit remuda-v<version>; the tag starts .github/workflows/remuda-release.yml.
-# Red CI tags nothing. Run it again after a failure: it goes on from the release commit it made.
+# Red CI tags nothing. Run it again after a failure, or after a fix on top: once Cargo.toml says
+# that version, it only waits for HEAD's CI and tags HEAD.
 set -eu
 version=${1:?usage: scripts/release <version>}
 echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "release: $version is not X.Y.Z" >&2; exit 1; }
@@ -19,10 +20,12 @@ cd "$(git rev-parse --show-toplevel)"
 git fetch origin master
 [ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || fail "$tag is already on origin"
 
-if [ "$(git log -1 --format=%s)" = "chore: release $version" ]; then
-  echo "release: going on from the release commit $(git rev-parse --short HEAD)"
+git merge-base --is-ancestor origin/master HEAD || fail "behind origin/master"
+if [ "$(sed -n 's/^version = "\(.*\)"/\1/p' crates/remuda-core/Cargo.toml | head -1)" = "$version" ]; then
+  cmp -s schema/rc.openrpc.json schema/released.openrpc.json ||
+    fail "Cargo.toml says $version, but schema/released.openrpc.json is not schema/rc.openrpc.json"
+  echo "release: master is at $version already: tagging $(git rev-parse --short HEAD) once its CI is green"
 else
-  git merge-base --is-ancestor origin/master HEAD || fail "behind origin/master"
   if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then fail "a local $tag exists: delete it first"; fi
   sed -i.bak "s/^version = \".*\"/version = \"$version\"/" crates/remuda-core/Cargo.toml
   rm -f crates/remuda-core/Cargo.toml.bak
@@ -44,7 +47,7 @@ done
 gh run watch "$run" --repo "$repo" --exit-status --interval 30 ||
   fail "CI failed on $sha (run $run), nothing tagged: fix it, or rerun a flaky job with gh run rerun $run --failed --repo $repo, then run this again"
 if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
-  [ "$(git rev-parse "$tag^{commit}")" = "$sha" ] || fail "the local $tag is not on $sha"
+  [ "$(git rev-parse "$tag^{commit}")" = "$sha" ] || fail "the local $tag is not on $sha: git tag -d $tag, then run this again"
 else
   git tag -a "$tag" -m "remuda-core $version" "$sha"
 fi

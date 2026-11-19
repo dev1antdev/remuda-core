@@ -27,14 +27,13 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   with Herdr's secrets and publishes to Herdr's servers: it stays disabled, never enable it; the
   justfile's `release-prepare` and `release-publish` are its recipes (a `v*` tag, a CHANGELOG entry):
   never run them. CHANGELOG.md is upstream's history; our release notes are GitHub's, from the pull
-  requests. If `scripts/release` fails, run it again: it goes on from the release commit it made,
-  and stops if the tag is on origin already; after red CI, fix master, or rerun a flaky job
-  (`gh run rerun <run> --failed`, the run it names) first. If the publish fails, look before acting:
+  requests. If `scripts/release` fails, run it again, after a fix on master too: once Cargo.toml says
+  that version, it waits for HEAD's CI and tags HEAD, and it stops if the tag is on origin already;
+  a flaky job is rerun first (`gh run rerun <run> --failed`, the run it names). If the publish fails, look before acting:
   `gh release view remuda-vX.Y.Z --repo dev1antdev/remuda-core --json isDraft,assets`; a draft is
   deleted (`gh release delete … --yes`, the tag stays) and the tag's whole run re-run, a published
-  release is left as it is; a publish GitHub cancelled while it waited (a third tag pushed meanwhile)
-  left no release: re-run that tag's run. An older version published after a newer one is not made
-  latest.
+  release is left as it is. Publishes wait for each other, and an older version published after a
+  newer one is not made latest.
 - **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
   variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
   `scripts/rebrand.sh` puts them in.
