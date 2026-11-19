@@ -10,7 +10,7 @@ docs:
 
 [windows]
 docs:
-    $env:HC_UPDATE_DOCS='1'; cargo test --locked -p herdr-core --test cli_docs
+    $env:RC_UPDATE_DOCS='1'; cargo test --locked -p remuda-core --test cli_docs
 
 [unix]
 docs-check:
@@ -18,13 +18,13 @@ docs-check:
 
 [windows]
 docs-check:
-    Remove-Item Env:HC_UPDATE_DOCS -ErrorAction SilentlyContinue; cargo test --locked -p herdr-core --test cli_docs
+    Remove-Item Env:RC_UPDATE_DOCS -ErrorAction SilentlyContinue; cargo test --locked -p remuda-core --test cli_docs
 
 [unix]
 test:
     cargo test --locked
 
-# Windows' own ConPTY swallows answers to programs: hc's tests need the one it ships.
+# Windows' own ConPTY swallows answers to programs: rc's tests need the one it ships.
 [windows]
 test:
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/fetch-conpty.ps1 -Dest target/debug
@@ -47,7 +47,7 @@ lint:
 fmt:
     cargo fmt --all
 
-# After a dependency change: the licenses hc carries (`hc --licenses`).
+# After a dependency change: the licenses rc carries (`rc --licenses`).
 [unix]
 notices:
     scripts/notices
@@ -66,16 +66,16 @@ install:
 pre-release: check docs-check
     #!/usr/bin/env bash
     set -euo pipefail
-    last=$(git describe --tags --abbrev=0 --match 'v*')
+    last=$(git describe --tags --abbrev=0 --match 'remuda-v*')
     echo; echo "Since $last:"; git log --oneline "$last"..HEAD
     echo
-    if git diff --quiet "$last"..HEAD -- crates/herdr-core/src/SKILL.md; then
-      echo "review: the agent manual (hc --skill, crates/herdr-core/src/SKILL.md) is unchanged since $last. Does it still match the changes above?"
+    if git diff --quiet "$last"..HEAD -- crates/remuda-core/src/SKILL.md; then
+      echo "review: the agent manual (rc --skill, crates/remuda-core/src/SKILL.md) is unchanged since $last. Does it still match the changes above?"
     else
-      echo "review: the agent manual (hc --skill) changed since $last. Read it once more."
+      echo "review: the agent manual (rc --skill) changed since $last. Read it once more."
     fi
     echo "review: README.md and docs/ describe the changes above."
-    echo "review: skills/herdr-core/SKILL.md only says when to use hc; change it only if that changed."
+    echo "review: skills/remuda-core/SKILL.md only says when to use rc; change it only if that changed."
 
 # Bump the version, refresh the schema snapshots, commit. Tags nothing.
 [unix]
@@ -87,11 +87,11 @@ release-prepare version:
     git fetch origin master --tags
     @git merge-base --is-ancestor origin/master HEAD || { echo "error: behind origin/master"; exit 1; }
     @! git rev-parse -q --verify "refs/tags/v{{version}}" >/dev/null || { echo "error: v{{version}} already exists"; exit 1; }
-    sed -i.bak 's/^version = ".*"/version = "{{version}}"/' crates/herdr-core/Cargo.toml && rm -f crates/herdr-core/Cargo.toml.bak
-    HC_UPDATE_SCHEMA=1 cargo test -p herdr-core --test m0
-    cp schema/hc.openrpc.json schema/released.openrpc.json
+    sed -i.bak 's/^version = ".*"/version = "{{version}}"/' crates/remuda-core/Cargo.toml && rm -f crates/remuda-core/Cargo.toml.bak
+    RC_UPDATE_SCHEMA=1 cargo test -p remuda-core --test m0
+    cp schema/rc.openrpc.json schema/released.openrpc.json
     just check
-    git add Cargo.lock crates/herdr-core/Cargo.toml schema
+    git add Cargo.lock crates/remuda-core/Cargo.toml schema
     git commit -m "chore: release {{version}}"
     @echo "v{{version}} prepared. Review it, then: just release-publish {{version}}"
 
@@ -99,7 +99,7 @@ release-prepare version:
 [unix]
 release-publish version:
     @[ -z "$(git status --porcelain)" ] || { echo "error: working tree must be clean"; exit 1; }
-    @grep -q '^version = "{{version}}"' crates/herdr-core/Cargo.toml || { echo "error: this checkout is not {{version}}; run just release-prepare {{version}}"; exit 1; }
+    @grep -q '^version = "{{version}}"' crates/remuda-core/Cargo.toml || { echo "error: this checkout is not {{version}}; run just release-prepare {{version}}"; exit 1; }
     @! git rev-parse -q --verify "refs/tags/v{{version}}" >/dev/null || { echo "error: v{{version}} already exists"; exit 1; }
     git push origin HEAD:master
     @sha="$(git rev-parse HEAD)"; run=""; \

@@ -18,7 +18,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: hc --version
+      label: rc --version
     validations:
       required: true
   - type: input

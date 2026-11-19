@@ -20,8 +20,14 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **Releases** are ours, tagged `remuda-v*` on a version line of our own. Upstream's
   `.github/workflows/release.yml` signs with Herdr's secrets and publishes to Herdr's servers: it
   stays disabled, never enable it. CHANGELOG.md is upstream's history; our releases do not go in it.
-- **Names**: what we ship will carry our own name, bundle id, socket and state paths, never Herdr's.
-  Until the rename lands, the code keeps upstream's names: do not rename anything in passing.
+- **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
+  variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
+  `scripts/rebrand.sh` puts them in. Until our release setup lands, `rc update`, the installers and
+  `rc machine add` to a machine of another OS or CPU do not work: they look for our names in Herdr's
+  release archives and for our bundle id under Herdr's signature, and refuse before installing
+  anything. Leave them to the release setup.
+- **The API** differs from herdr-core's in names alone: the error kind `rc_missing` (theirs
+  `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables.
 
 ## Keeping upstream's fixes applying
 
@@ -32,27 +38,47 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 
 ### Upstream files we changed
 
-- `AGENTS.md`: one line pointing here.
+- Every file upstream's names reach, renamed and moved by `scripts/rebrand.sh`, which also points
+  CI's upgrade test at our `remuda-v*` tags. A file of ours that names upstream on purpose goes on
+  the script's list of exclusions.
+- `AGENTS.md`, `README.md`: one line each pointing here; README's Install says to build from source
+  until our releases exist.
+- `scripts/install-local.sh`: makes the `rc` link only when no other `rc` is on PATH.
 
 ## Taking upstream's changes
 
 For each upstream release tag, on a branch of its own, as one chain so nothing merges into the
-wrong branch when a step fails:
+wrong branch when a step fails. The merge stops before committing, even when it is clean, so the
+rename goes into the merge commit:
 
 ```sh
 git fetch origin && git fetch upstream tag vX.Y.Z --no-tags &&
   git switch -c upstream-vX.Y.Z origin/master &&
-  git merge --no-ff vX.Y.Z -m "chore: merge upstream vX.Y.Z"
+  git merge --no-ff --no-commit vX.Y.Z
 ```
 
 When `upstream-vX.Y.Z` already exists (a sync begun before), do not run the chain again: switch to
 that branch, check `git branch --show-current` names it, and go on from where it stopped.
 
-Resolve each conflict by keeping upstream's change and applying ours on top of it, never by taking
-our side of a whole hunk or file (`-X ours`, `checkout --ours`), and update the list above if the
-files we change moved. Run `just check` and `just docs-check`, open a pull request to `master` and
-merge it with a merge commit, never squashed or rebased: a squash drops their history, and the next
-merge conflicts on the same lines again.
+Most conflicts are only the rename. In a file that carries nothing of ours but the rename, take
+upstream's side: `git checkout --theirs -- <file> && git add -- <file>`. A modify/delete at an old
+path (git did not see the rename) is upstream's copy over ours:
+`git checkout --theirs -- <old path> && git add -- <old path> && git mv -f <old path> <new path>`.
+A "file location" conflict needs only `git add` of the file where git put it. In a file with
+changes of ours beyond the rename, keep upstream's change and apply ours on top of it, never taking
+our side of a whole hunk or file (`-X ours`, `checkout --ours`), then `git add` it.
+
+When `git ls-files -u` prints nothing, rename, stage, look, and commit the merge:
+
+```sh
+scripts/rebrand.sh && git add -A && git diff --cached --stat &&
+  git commit -m "chore: merge upstream vX.Y.Z"
+```
+
+The script stops, naming them, when a file still has a copy at both its old and its new place.
+Update the list above if the files we change moved. Run `just check` and `just docs-check`, open a
+pull request to `master` and merge it with a merge commit, never squashed or rebased: a squash drops
+their history, and the next merge conflicts on the same lines again.
 
 ```sh
 gh pr merge <n> --repo dev1antdev/remuda-core --merge --subject "chore: merge upstream vX.Y.Z (#<n>)"

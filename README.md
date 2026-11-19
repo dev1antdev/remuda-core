@@ -1,30 +1,23 @@
-# herdr-core (`hc`)
+# remuda-core (`rc`)
 
-`hc` runs programs and coding agents in terminals that stay alive after you leave.
+remuda's clone of Herdr's terminal runtime: see [REMUDA.md](REMUDA.md).
+
+`rc` runs programs and coding agents in terminals that stay alive after you leave.
 Agents can start other agents, send them work, and hear back; you can attach to any terminal and take over.
 
 Core draws nothing. Use it from your shell, an agent, or your own app.
 
 ## Install
 
-Linux and macOS:
-
-```sh
-curl -fsSL https://releases.herdr.dev/core/install.sh | sh
-```
-
-Windows (PowerShell):
-
-```powershell
-powershell -c "irm https://releases.herdr.dev/core/install.ps1 | iex"
-```
+There is no remuda-core release yet: build it from this checkout and run `just install` (see
+[Build from source](#build-from-source)).
 
 Builds are available for Linux and macOS on x86_64 and aarch64, and Windows on x86_64.
 Linux builds are static. On Windows, templates and quoted shell commands need `sh` on PATH, such as Git for Windows provides.
 
-Run `hc update` to update. Running terminals keep running.
-Updates and `hc server restart` keep the environment the core started with;
-run `hc server restart --fresh` from a terminal outside Herdr to use that shell's
+Run `rc update` to update. Running terminals keep running.
+Updates and `rc server restart` keep the environment the core started with;
+run `rc server restart --fresh` from a terminal outside Herdr to use that shell's
 environment without ending programs. Stopping and starting also takes a fresh one.
 The update from an older core to 0.1.19 uses the updater's environment once,
 because older cores can't save it for the next core.
@@ -41,35 +34,35 @@ See [security](docs/security.md) for the trust and signing details.
 ## Run it and come back
 
 ```sh
-hc run cargo test                  # stream output and wait for it
-hc run --bg --name web bun dev     # start it and return
-hc ls                             # see live terminals
-hc attach web                     # take over; Ctrl+\ detaches
-hc read web --lines 100            # read without attaching
+rc run cargo test                  # stream output and wait for it
+rc run --bg --name web bun dev     # start it and return
+rc ls                             # see live terminals
+rc attach web                     # take over; Ctrl+\ detaches
+rc read web --lines 100            # read without attaching
 ```
 
 Closing your viewer does not end the program.
 A waiting run checks in after 180 seconds by default, leaving the program running.
 It prints the terminal's address so you can read it or wait again.
 
-For a terminal you want to keep even if its program is lost, use `hc run --keep`.
+For a terminal you want to keep even if its program is lost, use `rc run --keep`.
 Recovery starts a fresh shell, never reruns the task.
 A normal exit or an explicit kill still ends it.
 
 To show a lost kept program's last saved screen above the new shell, set
 `restore_screen = true` in the same config.toml described below. It defaults
 to false. Changes apply at the next recovery. A divider marks where the old
-program ended; on Windows its screen is in history. `hc read` includes that
+program ended; on Windows its screen is in history. `rc read` includes that
 old output, so scripts reading it can match text from the lost program. Each saved screen
 is consumed or discarded once, even with the setting off. A power cut that
 saves nothing starts blank.
 
 ## Default shell
 
-With no program, `hc run --bg` starts the machine's shell: `$SHELL` (or
+With no program, `rc run --bg` starts the machine's shell: `$SHELL` (or
 `/bin/sh`) on Unix, PowerShell 7 on Windows if available, else Windows PowerShell.
-Override it in `~/.config/herdr-core/config.toml` (Windows:
-`%APPDATA%\herdr-core\config.toml`, or `$XDG_CONFIG_HOME/herdr-core/config.toml`
+Override it in `~/.config/remuda-core/config.toml` (Windows:
+`%APPDATA%\remuda-core\config.toml`, or `$XDG_CONFIG_HOME/remuda-core/config.toml`
 when set):
 
 ```toml
@@ -105,20 +98,20 @@ that parent's limit and cause its reverse send to time out.
 
 ## Agents run agents
 
-Give an agent `hc --skill`. It prints the agent docs in one read, including how to delegate, wait, report back, and clean up.
+Give an agent `rc --skill`. It prints the agent docs in one read, including how to delegate, wait, report back, and clean up.
 
 [Templates](docs/templates.md) give an agent a command and a role.
 After saving the reviewer example from that page:
 
 ```sh
-hc templates
-hc run --bg --name review reviewer "Review src/x.rs. Read-only."
-hc send review "Focus on the error path."
-hc read review --lines 100
+rc templates
+rc run --bg --name review reviewer "Review src/x.rs. Read-only."
+rc send review "Focus on the error path."
+rc read review --lines 100
 ```
 
-Agents started inside an hc terminal become its children.
-They can report back with `hc send` and wait for their children with `hc wait --children all`.
+Agents started inside an rc terminal become its children.
+They can report back with `rc send` and wait for their children with `rc wait --children all`.
 The parent gets notes when a child needs attention or ends.
 Children end with their parent unless started with `--outlive-parent`.
 On Unix, ending a terminal hangs up its program and foreground job, rather than
@@ -132,9 +125,9 @@ recreated.
 ## Every machine
 
 ```sh
-hc machine add my-ssh-host --name box
-hc run --on box --cwd /srv/app cargo test
-hc attach box/t3
+rc machine add my-ssh-host --name box
+rc run --on box --cwd /srv/app cargo test
+rc attach box/t3
 ```
 
 Use the address returned by your run, not the example's `box/t3`.
@@ -147,13 +140,13 @@ An agent can say it is working, done, blocked, or in error through OSC 7501, the
 Core stores what it reports. It does not guess from screen text or recognize agent brands.
 A program that does not report status has none.
 
-Use `hc get review` for a snapshot or `hc events` to follow changes.
+Use `rc get review` for a snapshot or `rc events` to follow changes.
 
 ## Build your own client
 
-`hc schema` prints the request/response API as OpenRPC with JSON Schema.
+`rc schema` prints the request/response API as OpenRPC with JSON Schema.
 [The API docs](schema/README.md) cover connecting, terminal streams, events, and status.
-Use `hc connect` to carry the protocol over stdin and stdout, including through SSH.
+Use `rc connect` to carry the protocol over stdin and stdout, including through SSH.
 
 ## Docs
 
@@ -163,8 +156,8 @@ Use `hc connect` to carry the protocol over stdin and stdout, including through 
 - [Security](docs/security.md): access, state, and updates.
 - [API](schema/README.md): build a client.
 
-For a quick lookup, run `hc --help` or a command's help, such as `hc run --help`.
-For agents, use `hc --skill`.
+For a quick lookup, run `rc --help` or a command's help, such as `rc run --help`.
+For agents, use `rc --skill`.
 
 ## Build from source
 
@@ -172,7 +165,7 @@ You need Rust, Zig 0.16, and just. CI pins the Rust version in [.github/workflow
 
 ```sh
 git submodule update --init --depth 1
-cargo build --locked -p herdr-core
+cargo build --locked -p remuda-core
 just check
 ```
 
@@ -182,5 +175,5 @@ just check
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contributor setup and checks.
 
-License: [Apache-2.0](LICENSE). `hc --licenses` prints the included third-party licenses.
+License: [Apache-2.0](LICENSE). `rc --licenses` prints the included third-party licenses.
 After a dependency change, regenerate them with `just notices`.

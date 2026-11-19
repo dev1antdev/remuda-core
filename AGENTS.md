@@ -1,9 +1,9 @@
-# herdr-core
+# remuda-core
 
 If AGENTS.local.md exists, read it too: the maintainer's local rules.
 This is remuda's clone: read REMUDA.md too.
 
-`herdr-core` (alias `hc`) is a terminal runtime for coding agents: it runs
+`remuda-core` (alias `rc`) is a terminal runtime for coding agents: it runs
 programs in terminals, keeps them alive, relays raw bytes to any viewer,
 reads status from OSC 7501, and lets agents start, talk to, read, wait on and
 get notified by other agents. It draws nothing.
@@ -15,9 +15,9 @@ why.
 Can (`ogulcancelik`) maintains it. The code is authoritative; ask the
 maintainer about conflicting requirements.
 
-`hc --skill` prints the manual in `crates/herdr-core/src/SKILL.md`. The
-installable skill is the short stub in `skills/herdr-core/SKILL.md`: it says
-when to use hc and points to `hc --skill`, so it rarely changes.
+`rc --skill` prints the manual in `crates/remuda-core/src/SKILL.md`. The
+installable skill is the short stub in `skills/remuda-core/SKILL.md`: it says
+when to use rc and points to `rc --skill`, so it rarely changes.
 Keep the manual current when changing agent-facing behavior.
 
 ## The rule
@@ -39,7 +39,7 @@ layout or a workspace to return to, it does not belong here.
 - One API; the CLI is one call per command. The schema is generated from one
   method table, so params and results in `api/types.rs` are also CLI args and
   the published schema. Change them and regenerate:
-  `HC_UPDATE_SCHEMA=1 cargo test -p herdr-core --test m0`.
+  `RC_UPDATE_SCHEMA=1 cargo test -p remuda-core --test m0`.
 - Lean, KISS, always. Fewer lines, fewer files, fewer dependencies. No
   abstraction before a second real caller, no config for things nobody asked
   to configure.
@@ -58,10 +58,10 @@ layout or a workspace to return to, it does not belong here.
 
 ## Traps
 
-- Tests and smokes run in isolated sessions (`HC_SESSION`) with scratch XDG
+- Tests and smokes run in isolated sessions (`RC_SESSION`) with scratch XDG
   paths under `/var/tmp`. Never touch the machine's real core, Herdr, or its
   running agents. Clean up scratch data.
-- `just install` replaces the installed binary and restarts core. Running terminals are kept. It restarts through `scripts/restart-core.sh`, so a core it has to start inherits only the login variables that script lists, not the rest of your shell's. Never run a bare `hc server start` or an autostarting `hc` command from an agent shell when no core is running: that core, and every terminal it opens, takes your env.
+- `just install` replaces the installed binary and restarts core. Running terminals are kept. It restarts through `scripts/restart-core.sh`, so a core it has to start inherits only the login variables that script lists, not the rest of your shell's. Never run a bare `rc server start` or an autostarting `rc` command from an agent shell when no core is running: that core, and every terminal it opens, takes your env.
 - Real-agent smokes (Claude Code with haiku, Pi with a cheap model) cost
   money. Ask before running them.
 - A dependency change (crates or Ghostty) needs `just notices`; a test fails
