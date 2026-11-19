@@ -39,7 +39,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `scripts/rebrand.sh` puts them in.
 - **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
-  add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`).
+  add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
+  `format`).
 
 ## Keeping upstream's fixes applying
 
@@ -76,6 +77,19 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `remote.rs` declaring that module, a paragraph in `schema/README.md`, the generated schema,
   `keep_size: false` in the `AttachRequest` literals of `src/runtime/tests.rs` and
   `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
+- `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
+  colors as SGR, each starting with a style reset, history above the screen on the main screen
+  only (a full-screen program is not scrolled for it), at most 1000 rows and only the newest whose
+  JSON fits half a frame; a finished terminal answers its plain text. The rows are encoded cell by cell from
+  libghostty-vt's cell styles (its formatter drops a blank cell's background), a row walked along
+  its page from its first cell; the underline color is left out. Ours: `ghostty-vt/src/styled.rs` (`styled_screen`, `styled_history`, with their
+  tests) and `remuda-core/src/styled.rs` (`ReadFormat`, the read and its budget, `rc read`'s notes
+  on stderr for vt); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
+  `pub mod styled;` in `lib.rs`, the param in `api/types.rs`, its branch in `api.rs`, the default
+  in `api/run.rs`, the print call in `cli.rs`, the generated docs and schema; the other tests are
+  ours, in `tests/remuda.rs`. A core
+  older than this on an added machine ignores `format` and answers plain text (no row starts with
+  `ESC[0m`).
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

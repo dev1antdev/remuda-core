@@ -459,9 +459,10 @@ Arguments:
   [TERMINAL]  The terminal: `t7`, a name, or `machine/t7`
 
 Options:
-      --json           JSON output even in a terminal
-      --lines <LINES>  Lines of history above the screen [default: 0]
-  -h, --help           Print help
+      --json             JSON output even in a terminal
+      --lines <LINES>    Lines of history above the screen [default: 0]
+      --format <FORMAT>  plain, or vt: rows with their colors as SGR (a live terminal; a finished one, and an older core, answer plain text) [default: plain] [possible values: plain, vt]
+  -h, --help             Print help
 ```
 
 ## rc rm
