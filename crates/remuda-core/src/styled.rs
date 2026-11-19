@@ -1,6 +1,7 @@
 //! remuda's own addition (REMUDA.md): `terminal.read` with its colors.
 
 use crate::api::ReadResult;
+use crate::rpc::RpcError;
 use crate::runtime::Core;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -15,17 +16,81 @@ pub enum ReadFormat {
     Vt,
 }
 
-/// The live screen with up to `lines` of history above it (main screen only), with
-/// colors. None for a finished terminal: what it keeps has none.
-pub fn read(core: &Core, id: u32, lines: usize) -> Option<ReadResult> {
+/// At most this much JSON, half a frame: a reply past a frame ends the line it travels on.
+const BUDGET: usize = crate::wire::MAX_PAYLOAD / 2;
+
+/// The live screen with up to `lines` of history above it (main screen only, the
+/// newest that fit the budget), with colors. None for a finished terminal: what
+/// it keeps has none.
+pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, RpcError>> {
     let st = core.lock();
     let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
     let full_screen = screen.alt_screen();
-    let rows = screen.styled_rows(lines);
-    let shown = screen.size().1 as usize;
-    let kept = rows.len().saturating_sub(shown);
+    let Some((rows, kept, cut)) = fit(screen.styled_screen(), screen.styled_history().take(lines), BUDGET) else {
+        let hint = "read it as plain text (no format)";
+        return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
+    };
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
-    let lost = lines > kept && (full_screen || t.printed > (kept + shown) as u64);
+    let shown = screen.size().1 as usize;
+    let lost = cut || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
     let how = if lines == 0 || full_screen { "screen" } else { "history" };
-    Some(ReadResult { text: rows.join("\n"), complete: t.screen == "exact" && !lost, how: how.into(), why: None })
+    let complete = t.screen == "exact" && !lost;
+    Some(Ok(ReadResult { text: rows.join("\n"), complete, how: how.into(), why: None }))
+}
+
+/// The screen and the newest history rows whose JSON fits `budget`, oldest first:
+/// the rows, how many history rows, whether some were cut. None: the screen alone is too big.
+fn fit(
+    screen: Vec<String>,
+    newest_first: impl Iterator<Item = String>,
+    budget: usize,
+) -> Option<(Vec<String>, usize, bool)> {
+    let json = |row: &str| serde_json::to_string(row).map_or(row.len(), |s| s.len()) + 1;
+    let mut used: usize = screen.iter().map(|r| json(r)).sum();
+    if used > budget {
+        return None;
+    }
+    let mut rows = Vec::new();
+    for row in newest_first {
+        used += json(&row);
+        if used > budget {
+            let kept = rows.len();
+            rows.reverse();
+            rows.extend(screen);
+            return Some((rows, kept, true));
+        }
+        rows.push(row);
+    }
+    let kept = rows.len();
+    rows.reverse();
+    rows.extend(screen);
+    Some((rows, kept, false))
+}
+
+/// `rc read`'s text; for vt its own notes go to stderr, so stdout holds rows alone.
+pub fn print_read(text: &str, format: ReadFormat) {
+    match (format, text.split_once("\n[rc] ")) {
+        (ReadFormat::Vt, Some((rows, note))) => {
+            println!("{rows}");
+            eprintln!("[rc] {note}");
+        }
+        _ => println!("{text}"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn history_fills_what_the_screen_leaves_of_the_budget_newest_first() {
+        let rows = |r: &[&str]| r.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        let screen = rows(&["\x1b[0ms"]);
+        // Each row is 13 bytes of JSON with its line break: the quotes, "\u001b[0m" and a letter.
+        let fits = fit(screen.clone(), rows(&["\x1b[0mc", "\x1b[0mb", "\x1b[0ma"]).into_iter(), 39);
+        assert_eq!(fits, Some((rows(&["\x1b[0mb", "\x1b[0mc", "\x1b[0ms"]), 2, true)));
+        let all = fit(screen.clone(), rows(&["\x1b[0mc"]).into_iter(), 39);
+        assert_eq!(all, Some((rows(&["\x1b[0mc", "\x1b[0ms"]), 1, false)));
+        assert_eq!(fit(screen, std::iter::empty(), 12), None, "the screen alone does not fit");
+    }
 }

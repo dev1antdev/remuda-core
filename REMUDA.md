@@ -79,11 +79,15 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `src/viewers/tests.rs`; the other test is ours, in `tests/remuda.rs`).
 - `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
   colors as SGR, each starting with a style reset, history above the screen on the main screen
-  only (a full-screen program is not scrolled for it); a finished terminal answers its plain text.
-  Ours: `ghostty-vt/src/styled.rs` (`styled_rows`, with its tests) and `remuda-core/src/styled.rs`
-  (`ReadFormat`, the read); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
+  only (a full-screen program is not scrolled for it) and only the newest rows whose JSON fits half
+  a frame; a finished terminal answers its plain text. The rows are encoded cell by cell from
+  libghostty-vt's cell styles (its formatter drops a blank cell's background); the underline color
+  is left out. Ours: `ghostty-vt/src/styled.rs` (`styled_screen`, `styled_history`, with their
+  tests) and `remuda-core/src/styled.rs` (`ReadFormat`, the read and its budget, `rc read`'s notes
+  on stderr for vt); in upstream's files `mod styled;` in `ghostty-vt/src/lib.rs`,
   `pub mod styled;` in `lib.rs`, the param in `api/types.rs`, its branch in `api.rs`, the default
-  in `api/run.rs`, the generated docs and schema; the test is ours, in `tests/remuda.rs`. A core
+  in `api/run.rs`, the print call in `cli.rs`, the generated docs and schema; the other tests are
+  ours, in `tests/remuda.rs`. A core
   older than this on an added machine ignores `format` and answers plain text (no row starts with
   `ESC[0m`).
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):

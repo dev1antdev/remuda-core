@@ -89,7 +89,7 @@ fn read_in_vt_gives_each_row_with_its_colors() {
     let vt = s.json(&["read", "--format", "vt", &t])["text"].as_str().unwrap().to_string();
     let rows: Vec<&str> = vt.split('\n').collect();
     assert!(rows.iter().all(|r| r.starts_with("\x1b[0m")), "{vt:?}");
-    assert!(rows[0].contains("\x1b[1m") && rows[0].contains("38;5;1mred"), "{vt:?}");
+    assert!(rows[0].contains("\x1b[0;1;38;5;1mred"), "{vt:?}");
     assert!(!vt.contains("\x1b]") && !vt.contains("\x1b[?") && !vt.contains("\x1b[H"), "{vt:?}");
     assert!(!s.json(&["read", &t])["text"].as_str().unwrap().contains('\x1b'), "plain stays plain");
 
@@ -97,4 +97,16 @@ fn read_in_vt_gives_each_row_with_its_colors() {
     wait_until("finished", || get(&s, &t)["state"] == "finished");
     let kept = s.json(&["read", "--format", "vt", &t])["text"].as_str().unwrap().to_string();
     assert!(kept.contains("red plain") && !kept.contains('\x1b'), "{kept:?}");
+}
+
+#[test]
+fn read_in_vt_keeps_its_notes_off_the_rows() {
+    let s = session("0");
+    let program = "printf '\\033[?1049h\\033[31mfull'; sleep 100";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("drawn", || text(&s, &t).contains("full"));
+    let out = s.rc(&["read", "--format", "vt", "--lines", "5", &t]);
+    let rows = String::from_utf8(out.stdout).unwrap();
+    assert!(rows.lines().all(|r| r.starts_with("\x1b[0m")), "{rows:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("[rc] incomplete"));
 }

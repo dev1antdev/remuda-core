@@ -469,7 +469,7 @@ fn run(cmd: Option<Cmd>, json: bool, asked: bool) -> Result<Option<Out>, RpcErro
             }
             // Its output is text: plain even when piped, JSON only when asked.
             if !asked {
-                println!("{human}");
+                crate::styled::print_read(&human, p.format);
                 return Ok(None);
             }
             Out { json: r, human }

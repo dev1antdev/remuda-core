@@ -382,7 +382,7 @@ async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcEr
         && let Some(result) = crate::styled::read(core, id, p.lines)
     {
         core.flush_saved().await?;
-        return Ok(result);
+        return result;
     }
     // A full-screen app keeps its history to itself: scroll it to read it.
     let full_screen = core.lock().screens.get(&id).is_some_and(|s| s.alt_screen());
