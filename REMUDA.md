@@ -20,8 +20,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **Releases** are ours, tagged `remuda-v*` on a version line of our own. Upstream's
   `.github/workflows/release.yml` signs with Herdr's secrets and publishes to Herdr's servers: it
   stays disabled, never enable it. CHANGELOG.md is upstream's history; our releases do not go in it.
-- **Names**: what we ship will carry our own name, bundle id, socket and state paths, never Herdr's.
-  Until the rename lands, the code keeps upstream's names: do not rename anything in passing.
+- **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
+  variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
+  `scripts/rebrand.sh` puts them in. The release addresses, installers and the macOS signature check
+  still point at Herdr's until our release setup lands: leave them to it.
 
 ## Keeping upstream's fixes applying
 
@@ -32,7 +34,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 
 ### Upstream files we changed
 
-- `AGENTS.md`: one line pointing here.
+- Every file upstream's names reach: renamed by `scripts/rebrand.sh` (`herdr-core` to `remuda-core`,
+  `hc` to `rc`, `HC_` to `RC_` and the rest it lists), with `crates/herdr-core`, `skills/herdr-core`
+  and `schema/hc.openrpc.json` moved to ours, and CI's upgrade test reading our `remuda-v*` tags.
+- `AGENTS.md`, `README.md`: one line each pointing here.
 
 ## Taking upstream's changes
 
@@ -48,11 +53,14 @@ git fetch origin && git fetch upstream tag vX.Y.Z --no-tags &&
 When `upstream-vX.Y.Z` already exists (a sync begun before), do not run the chain again: switch to
 that branch, check `git branch --show-current` names it, and go on from where it stopped.
 
-Resolve each conflict by keeping upstream's change and applying ours on top of it, never by taking
-our side of a whole hunk or file (`-X ours`, `checkout --ours`), and update the list above if the
-files we change moved. Run `just check` and `just docs-check`, open a pull request to `master` and
-merge it with a merge commit, never squashed or rebased: a squash drops their history, and the next
-merge conflicts on the same lines again.
+Most conflicts are only the rename: in a file that carries nothing of ours but the rename, take
+upstream's side (`git checkout --theirs -- <file>`). In a file with changes of ours beyond it, keep
+upstream's change and apply ours on top of it, never taking our side of a whole hunk or file
+(`-X ours`, `checkout --ours`). Once nothing is in conflict, run `scripts/rebrand.sh`: it renames
+what upstream brought, new files and folders too. Update the list above if the files we change
+moved, commit the merge, run `just check` and `just docs-check`, open a pull request to `master`
+and merge it with a merge commit, never squashed or rebased: a squash drops their history, and the
+next merge conflicts on the same lines again.
 
 ```sh
 gh pr merge <n> --repo dev1antdev/remuda-core --merge --subject "chore: merge upstream vX.Y.Z (#<n>)"

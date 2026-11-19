@@ -1,5 +1,7 @@
 # remuda-core (`rc`)
 
+remuda's clone of Herdr's terminal runtime: see [REMUDA.md](REMUDA.md).
+
 `rc` runs programs and coding agents in terminals that stay alive after you leave.
 Agents can start other agents, send them work, and hear back; you can attach to any terminal and take over.
 
