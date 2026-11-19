@@ -264,9 +264,10 @@ fn observe(w: &mut Watch, lines: &[String]) {
 }
 
 /// What still waits after a look's telling, cut to `MAX_PENDING` rows and
-/// `MAX_PENDING_BYTES`, the oldest going first and counted as lost.
+/// `MAX_PENDING_BYTES`, the oldest going first and counted as lost. The newest
+/// always stays, so a loss always has a row to be told with.
 fn trim(w: &mut Watch) {
-    while w.pending.len() > MAX_PENDING || w.pending_bytes > MAX_PENDING_BYTES {
+    while w.pending.len() > 1 && (w.pending.len() > MAX_PENDING || w.pending_bytes > MAX_PENDING_BYTES) {
         let (gone, _) = w.pending.pop_front().expect("over a limit, so not empty");
         w.pending_bytes -= gone.len();
         w.lost += 1;
@@ -385,6 +386,17 @@ mod tests {
             "the oldest went"
         );
         assert!(events[1]["data"].get("lost").is_none());
+    }
+
+    #[test]
+    fn a_last_row_past_the_limit_still_waits_to_be_told() {
+        let mut w = [fail_watch()];
+        let report = format!("FAIL {}", "x".repeat(MAX_PENDING_BYTES + 1));
+        observe(&mut w[0], &lines(&[&report]));
+        assert!(tell(&mut w, 0, &mut Budget { events: 0, bytes: 1 << 20 }).is_empty());
+        trim(&mut w[0]);
+        let events = tell(&mut w, 0, &mut Budget { events: 1, bytes: 1 << 20 });
+        assert_eq!(events[0]["data"]["line"], json!(report));
     }
 
     #[test]
