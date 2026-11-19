@@ -65,7 +65,7 @@ pub struct Watch {
     /// Rows seen and not told yet, each with whether it stood there when the watch began.
     pending: VecDeque<(String, bool)>,
     pending_bytes: usize,
-    /// Rows dropped from a full `pending`, to tell as such.
+    /// Rows dropped from a full `pending`, told with the next row that is sent.
     lost: usize,
     looked: bool,
     /// Its terminal finished (or went) and what it left was looked at.
@@ -210,6 +210,7 @@ fn look(
         }
     }
     let events = tell(watches, turn, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
+    watches.iter_mut().for_each(trim);
     for mut params in events {
         st.events.seq += 1;
         params["seq"] = st.events.seq.into();
@@ -258,13 +259,18 @@ fn observe(w: &mut Watch, lines: &[String]) {
             w.pending.push_back((line.clone(), fresh));
         }
     }
+    w.seen = standing;
+    w.looked = true;
+}
+
+/// What still waits after a look's telling, cut to `MAX_PENDING` rows and
+/// `MAX_PENDING_BYTES`, the oldest going first and counted as lost.
+fn trim(w: &mut Watch) {
     while w.pending.len() > MAX_PENDING || w.pending_bytes > MAX_PENDING_BYTES {
         let (gone, _) = w.pending.pop_front().expect("over a limit, so not empty");
         w.pending_bytes -= gone.len();
         w.lost += 1;
     }
-    w.seen = standing;
-    w.looked = true;
 }
 
 /// Each watch's waiting rows in turn, one at a time from each, starting further
@@ -276,24 +282,18 @@ fn tell(watches: &mut [Watch], turn: usize, budget: &mut Budget) -> Vec<Value> {
         let mut told = false;
         for k in 0..count {
             let w = &mut watches[(turn + k) % count];
-            let address = crate::terminals::address(w.terminal);
-            let event = if w.lost > 0 {
-                json!({"type": "output", "terminal": address, "data": {"watch": w.id, "lost": w.lost}})
-            } else if let Some((line, fresh)) = w.pending.front() {
-                json!({"type": "output", "terminal": address, "data": {"watch": w.id, "line": line, "fresh": fresh}})
-            } else {
-                continue;
-            };
-            let size = w.id.len() + w.pending.front().map_or(0, |(line, _)| line.len()) + 128;
-            if !budget.take(size) {
+            let Some((line, fresh)) = w.pending.front() else { continue };
+            if !budget.take(w.id.len() + line.len() + 128) {
                 return events;
             }
+            let mut data = json!({"watch": w.id, "line": line, "fresh": fresh});
+            // Rows dropped before this one ride on it rather than take a turn of their own.
             if w.lost > 0 {
-                w.lost = 0;
-            } else if let Some((line, _)) = w.pending.pop_front() {
-                w.pending_bytes -= line.len();
+                data["lost"] = std::mem::take(&mut w.lost).into();
             }
-            events.push(event);
+            events.push(json!({"type": "output", "terminal": crate::terminals::address(w.terminal), "data": data}));
+            let (line, _) = w.pending.pop_front().expect("its front was just read");
+            w.pending_bytes -= line.len();
             told = true;
         }
         if !told {
@@ -372,12 +372,42 @@ mod tests {
     }
 
     #[test]
-    fn rows_past_what_a_watch_keeps_are_told_as_lost() {
+    fn rows_left_waiting_past_what_a_watch_keeps_go_and_the_next_row_says_so() {
         let mut w = [fail_watch()];
         let flood: Vec<String> = (0..MAX_PENDING + 5).map(|n| format!("{n} FAIL")).collect();
         observe(&mut w[0], &flood);
+        assert!(tell(&mut w, 0, &mut Budget { events: 0, bytes: 1 << 20 }).is_empty());
+        trim(&mut w[0]);
         let events = tell(&mut w, 0, &mut Budget { events: 2, bytes: 1 << 20 });
-        assert_eq!(events[0]["data"]["lost"], 5);
-        assert_eq!(events[1]["data"]["line"], "5 FAIL", "the oldest went");
+        assert_eq!(
+            (&events[0]["data"]["line"], &events[0]["data"]["lost"]),
+            (&json!("5 FAIL"), &json!(5)),
+            "the oldest went"
+        );
+        assert!(events[1]["data"].get("lost").is_none());
+    }
+
+    #[test]
+    fn a_burst_the_look_can_send_is_sent_whole() {
+        let mut w = [fail_watch()];
+        let burst: Vec<String> = (0..180).map(|n| format!("{n:03} FAIL {}", "x".repeat(380))).collect();
+        assert!(burst.iter().map(String::len).sum::<usize>() > MAX_PENDING_BYTES);
+        observe(&mut w[0], &burst);
+        let events = tell(&mut w, 0, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
+        trim(&mut w[0]);
+        assert_eq!(events.len(), 180);
+        assert!(events.iter().all(|e| e["data"].get("lost").is_none()));
+    }
+
+    #[test]
+    fn losses_never_take_the_turns_rows_need() {
+        let mut ws: Vec<Watch> = (0..4).map(|_| fail_watch()).collect();
+        for w in &mut ws {
+            let flood: Vec<String> = (0..MAX_PENDING + 1).map(|n| format!("{n} FAIL")).collect();
+            observe(w, &flood);
+            trim(w);
+        }
+        let events = tell(&mut ws, 0, &mut Budget { events: 4, bytes: 1 << 20 });
+        assert!(events.iter().all(|e| e["data"]["line"].is_string()), "every turn carries a row");
     }
 }
