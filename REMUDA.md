@@ -34,9 +34,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 
 ### Upstream files we changed
 
-- Every file upstream's names reach: renamed by `scripts/rebrand.sh` (`herdr-core` to `remuda-core`,
-  `hc` to `rc`, `HC_` to `RC_` and the rest it lists), with `crates/herdr-core`, `skills/herdr-core`
-  and `schema/hc.openrpc.json` moved to ours, and CI's upgrade test reading our `remuda-v*` tags.
+- Every file upstream's names reach, renamed and moved by `scripts/rebrand.sh`, which also points
+  CI's upgrade test at our `remuda-v*` tags.
 - `AGENTS.md`, `README.md`: one line each pointing here.
 
 ## Taking upstream's changes
