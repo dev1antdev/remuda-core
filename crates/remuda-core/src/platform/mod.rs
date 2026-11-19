@@ -320,7 +320,7 @@ pub(crate) fn restored_environment(
         if named(key, "XPC_FLAGS") {
             return true;
         }
-        [crate::sweep::VAR, crate::sweep::RUNTIME, "RC_LAUNCHD_DIRECT", "RC_LAUNCHD_DETACH", "_HC_RESPONSIBLE_PID"]
+        [crate::sweep::VAR, crate::sweep::RUNTIME, "RC_LAUNCHD_DIRECT", "RC_LAUNCHD_DETACH", "_RC_RESPONSIBLE_PID"]
             .iter()
             .any(|name| named(key, name))
     };

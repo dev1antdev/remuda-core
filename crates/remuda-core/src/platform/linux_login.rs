@@ -12,9 +12,9 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 const CAPTURING: &str = "RC_LOGIN_CAPTURE";
-const MARKER: &[u8] = b"\0HC_LOGIN_ENV\0";
-const END: &[u8] = b"\0HC_LOGIN_END\0";
-const SCRIPT: &str = "printf '\\0HC_LOGIN_ENV\\0'; /usr/bin/env -0; printf '\\0HC_LOGIN_END\\0'";
+const MARKER: &[u8] = b"\0RC_LOGIN_ENV\0";
+const END: &[u8] = b"\0RC_LOGIN_END\0";
+const SCRIPT: &str = "printf '\\0RC_LOGIN_ENV\\0'; /usr/bin/env -0; printf '\\0RC_LOGIN_END\\0'";
 
 pub(super) fn apply(cmd: &mut Command, state: &Path) {
     if std::env::var_os(CAPTURING).is_some() {
@@ -164,11 +164,11 @@ mod tests {
     #[test]
     fn login_environment_ignores_profile_chatter_and_preserves_values() {
         let vars =
-            parse(b"hello\n\0HC_LOGIN_ENV\0PATH=/home/me/bin:/bin\0VALUE=one\ntwo=three\0\0HC_LOGIN_END\0goodbye\n")
+            parse(b"hello\n\0RC_LOGIN_ENV\0PATH=/home/me/bin:/bin\0VALUE=one\ntwo=three\0\0RC_LOGIN_END\0goodbye\n")
                 .unwrap();
         assert_eq!(vars[std::ffi::OsStr::new("PATH")], "/home/me/bin:/bin");
         assert_eq!(vars[std::ffi::OsStr::new("VALUE")], "one\ntwo=three");
         assert!(parse(b"hello\n").is_err());
-        assert!(parse(b"\0HC_LOGIN_ENV\0PATH=/bin").is_err());
+        assert!(parse(b"\0RC_LOGIN_ENV\0PATH=/bin").is_err());
     }
 }

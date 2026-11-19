@@ -7,7 +7,7 @@ use std::os::unix::process::CommandExt;
 use std::process::Command;
 
 type Disclaim = unsafe extern "C" fn(*mut libc::posix_spawnattr_t, libc::c_int) -> libc::c_int;
-const MARKER: &str = "_HC_RESPONSIBLE_PID";
+const MARKER: &str = "_RC_RESPONSIBLE_PID";
 
 pub fn holder_startup() {
     if std::env::args_os().nth(1).as_deref() != Some(OsStr::new("hold")) {

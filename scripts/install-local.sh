@@ -17,5 +17,5 @@ else
   install -m 755 target/release/remuda-core "$bin/remuda-core.new"
   mv -f "$bin/remuda-core.new" "$bin/remuda-core"
 fi
-[ -e "$bin/rc" ] || [ -L "$bin/rc" ] || ln -s remuda-core "$bin/rc"
+command -v rc > /dev/null || [ -e "$bin/rc" ] || [ -L "$bin/rc" ] || ln -s remuda-core "$bin/rc"
 sh scripts/restart-core.sh "$bin/remuda-core"

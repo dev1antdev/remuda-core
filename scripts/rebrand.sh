@@ -10,7 +10,7 @@ move() {
   git ls-files -- "$1" | while IFS= read -r from; do
     to="$2${from#"$1"}"
     mkdir -p "$(dirname "$to")"
-    git mv "$from" "$to"
+    git mv -f "$from" "$to"
   done
   if [ -d "$1" ]; then find "$1" -type d -empty -delete; fi
 }
@@ -20,7 +20,7 @@ move schema/hc.openrpc.json schema/rc.openrpc.json
 
 # Text files only (-I), never vendored code, upstream's history and licenses, or our own files
 # that name upstream on purpose.
-git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribution/notices' \
+git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribution/notices' ':!distribution/windows' \
   ':!REMUDA.md' ':!CLAUDE.md' ':!scripts/rebrand.sh' |
   xargs -0 perl -pi -e '
     s{herdrdev/herdr-core}{dev1antdev/remuda-core}g;
@@ -30,7 +30,7 @@ git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribu
     s{herdr_core}{remuda_core}g;
     s{in Herdr terminals}{in remuda core terminals}g;
     s{HERDR_RELEASES_URL}{RC_RELEASES_URL}g;
-    s{\bHC_}{RC_}g;
+    s{(?:(?<![A-Za-z0-9])|(?<=\\[nrt0]))HC_}{RC_}g;
     s{(?:(?<![A-Za-z0-9])|(?<=\\[nrt]))hc(?![A-Za-z0-9])}{rc}g;
     s{--match \x27v\*\x27}{--match \x27remuda-v*\x27}g;
   '
@@ -39,4 +39,6 @@ git grep -l -z -I -e '' -- . ':!vendor' ':!CHANGELOG.md' ':!LICENSE' ':!distribu
 if command -v cargo > /dev/null; then
   cargo fmt --all
   cargo update --workspace --offline --quiet
+else
+  echo "rebrand.sh: no cargo here: run cargo fmt --all and cargo update --workspace --offline" >&2
 fi

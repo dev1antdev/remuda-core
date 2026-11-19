@@ -22,8 +22,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   stays disabled, never enable it. CHANGELOG.md is upstream's history; our releases do not go in it.
 - **Names** are ours, never Herdr's: the binary `remuda-core` with the command `rc`, `RC_*`
   variables, our own socket and state paths, the bundle id `dev.mardeus.remuda-core`.
-  `scripts/rebrand.sh` puts them in. The release addresses, installers and the macOS signature check
-  still point at Herdr's until our release setup lands: leave them to it.
+  `scripts/rebrand.sh` puts them in. Until our release setup lands, `rc update`, the installers and
+  `rc machine add` to a machine of another OS or CPU do not work: they look for our names in Herdr's
+  release archives and for our bundle id under Herdr's signature, and refuse before installing
+  anything. Leave them to the release setup.
+- **The API** differs from herdr-core's in names alone: the error kind `rc_missing` (theirs
+  `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables.
 
 ## Keeping upstream's fixes applying
 
@@ -35,8 +39,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 ### Upstream files we changed
 
 - Every file upstream's names reach, renamed and moved by `scripts/rebrand.sh`, which also points
-  CI's upgrade test at our `remuda-v*` tags.
+  CI's upgrade test at our `remuda-v*` tags. A file of ours that names upstream on purpose goes on
+  the script's list of exclusions.
 - `AGENTS.md`, `README.md`: one line each pointing here.
+- `scripts/install-local.sh`: makes the `rc` link only when no other `rc` is on PATH.
 
 ## Taking upstream's changes
 
@@ -53,7 +59,9 @@ When `upstream-vX.Y.Z` already exists (a sync begun before), do not run the chai
 that branch, check `git branch --show-current` names it, and go on from where it stopped.
 
 Most conflicts are only the rename: in a file that carries nothing of ours but the rename, take
-upstream's side (`git checkout --theirs -- <file>`). In a file with changes of ours beyond it, keep
+upstream's side (`git checkout --theirs -- <file>`, then `git add` it); a modify/delete at an old
+path is the same, and a "file location" conflict is resolved by `git add` of the file where git put
+it. In a file with changes of ours beyond it, keep
 upstream's change and apply ours on top of it, never taking our side of a whole hunk or file
 (`-X ours`, `checkout --ours`). Once nothing is in conflict, run `scripts/rebrand.sh`: it renames
 what upstream brought, new files and folders too. Update the list above if the files we change
