@@ -192,12 +192,6 @@ fn look(core: &Core, reach: &Reach, watches: &mut [Watch], printed: &mut HashMap
     true
 }
 
-/// Matching rows in the order they stand, for tests.
-#[cfg(test)]
-fn matching(find: &Find, rows: &[&str]) -> Vec<String> {
-    rows.iter().filter(|r| find.matches(r)).map(|r| r.to_string()).collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,7 +203,7 @@ mod tests {
     #[test]
     fn a_regex_reads_digits_and_words_as_unicode_does() {
         let w = compile(&[watch(Match::Regex(r"^\d+ failed$".into()), 40)], |_| Ok(1)).unwrap();
-        assert_eq!(matching(&w[0].find, &["٣ failed", "x failed"]), ["٣ failed"]);
+        assert!(w[0].find.matches("٣ failed") && !w[0].find.matches("x failed"));
     }
 
     #[test]
