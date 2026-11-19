@@ -4,6 +4,10 @@
 # (REMUDA.md). A second run changes nothing.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+if [ -n "$(git ls-files -u)" ]; then
+  echo "rebrand.sh: resolve and git add the merge's conflicts first (git ls-files -u lists them)" >&2
+  exit 1
+fi
 
 # File by file, so a file an upstream merge left in an old folder joins the moved one; a file with a
 # copy at both places stops the run before anything moves.

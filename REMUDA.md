@@ -61,14 +61,14 @@ When `upstream-vX.Y.Z` already exists (a sync begun before), do not run the chai
 that branch, check `git branch --show-current` names it, and go on from where it stopped.
 
 Most conflicts are only the rename. In a file that carries nothing of ours but the rename, take
-upstream's side: `git checkout --theirs -- <file>`. A modify/delete at an old path (git did not see
-the rename) is upstream's copy over ours: `git checkout --theirs -- <old path>`, then
-`git mv -f <old path> <new path>`. A "file location" conflict needs only `git add` of the file
-where git put it. In a file with changes of ours beyond the rename, keep upstream's change and
-apply ours on top of it, never taking our side of a whole hunk or file (`-X ours`,
-`checkout --ours`).
+upstream's side: `git checkout --theirs -- <file> && git add -- <file>`. A modify/delete at an old
+path (git did not see the rename) is upstream's copy over ours:
+`git checkout --theirs -- <old path> && git add -- <old path> && git mv -f <old path> <new path>`.
+A "file location" conflict needs only `git add` of the file where git put it. In a file with
+changes of ours beyond the rename, keep upstream's change and apply ours on top of it, never taking
+our side of a whole hunk or file (`-X ours`, `checkout --ours`), then `git add` it.
 
-Then rename, stage, look, and commit the merge:
+When `git ls-files -u` prints nothing, rename, stage, look, and commit the merge:
 
 ```sh
 scripts/rebrand.sh && git add -A && git diff --cached --stat &&
