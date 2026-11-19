@@ -29,6 +29,8 @@ use viewers::{RESIZE_LOST, negotiate_resize, reattach};
 pub use viewers::{Relayed, attach, conn_gone, relay_in};
 
 #[cfg(test)]
+mod remuda_tests;
+#[cfg(test)]
 mod tests;
 
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {

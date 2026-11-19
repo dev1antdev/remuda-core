@@ -4,6 +4,7 @@ mod common;
 
 use common::framed::Viewer;
 use common::*;
+use remuda_core::wire;
 use serde_json::json;
 use std::time::{Duration, Instant};
 
@@ -15,6 +16,11 @@ fn session(quiet_ms: &str) -> Session {
 
 fn bytes(s: &Session) -> String {
     s.json(&["run", "--bg", "sh", "-c", BYTES])["address"].as_str().unwrap().to_string()
+}
+
+fn size(s: &Session, t: &str) -> (u64, u64) {
+    let r = s.json(&["get", t]);
+    (r["cols"].as_u64().unwrap(), r["rows"].as_u64().unwrap())
 }
 
 #[test]
@@ -40,4 +46,29 @@ fn keys_without_now_still_wait_for_the_pause() {
     let pressed = Instant::now();
     s.json(&["keys", &t, "b"]);
     assert!(pressed.elapsed() >= Duration::from_millis(500), "did not wait: {:?}", pressed.elapsed());
+}
+
+#[test]
+fn a_viewer_that_keeps_the_size_types_without_taking_it() {
+    let s = session("0");
+    let t = bytes(&s);
+    let mut desk = Viewer::attach(&s, &t, 100, 30, json!({}));
+    assert_eq!(size(&s, &t), (100, 30));
+    let mut phone = Viewer::attach(&s, &t, 40, 20, json!({"keep_size": true, "resize_notifications": true}));
+    assert_eq!(size(&s, &t), (100, 30), "attaching");
+    let grid = std::iter::from_fn(|| phone.conn.stash.pop_front().or_else(|| phone.conn.read(Duration::from_secs(2))))
+        .find(|(_, kind, _)| *kind == wire::RESIZE);
+    assert_eq!(grid.map(|(_, _, size)| size), Some(vec![100, 0, 30, 0]), "told the terminal's own grid");
+
+    phone.conn.send(phone.channel, wire::RESIZE, &[50, 0, 25, 0]);
+    phone.conn.send(phone.channel, wire::FOCUS, &[1]);
+    phone.typed(b"x");
+    phone.shows("78");
+    assert_eq!(size(&s, &t), (100, 30), "typing, resizing and focusing");
+
+    desk.conn.send(desk.channel, wire::CLOSE, &[]);
+    desk.until("detached", |v| v.closed.is_some());
+    assert_eq!(size(&s, &t), (100, 30), "the desk left");
+    drop(phone);
+    wait_until("headless again", || size(&s, &t) == (200, 120));
 }

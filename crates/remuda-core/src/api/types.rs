@@ -405,6 +405,11 @@ pub struct AttachParams {
     #[arg(skip)]
     #[serde(default)]
     pub resize_notifications: bool,
+    /// Types, but never sets the terminal's size: its RESIZE only records its own.
+    /// Takes `resize_notifications` like an observer.
+    #[arg(skip)]
+    #[serde(default)]
+    pub keep_size: bool,
     /// Scrollback lines to show first (main screen only).
     #[arg(long, default_value_t = 0)]
     #[serde(default)]

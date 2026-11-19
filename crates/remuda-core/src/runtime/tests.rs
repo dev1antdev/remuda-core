@@ -38,6 +38,7 @@ async fn image_streams_share_one_timer_task_and_keep_the_latest_deadline() {
             id,
             AttachRequest {
                 observe: false,
+                keep_size: false,
                 resize_notifications: false,
                 history: 0,
                 size: (80, 24),
@@ -158,6 +159,7 @@ async fn handover_carries_held_replies_and_answers_including_final_holder_output
             id,
             AttachRequest {
                 observe: false,
+                keep_size: false,
                 resize_notifications: false,
                 history: 0,
                 size: (80, 24),
@@ -241,6 +243,7 @@ async fn keys_pressed_during_a_paste_follow_its_submit() {
             id,
             AttachRequest {
                 observe: false,
+                keep_size: false,
                 resize_notifications: false,
                 history: 0,
                 size: (80, 24),

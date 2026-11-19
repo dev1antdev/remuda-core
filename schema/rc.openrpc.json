@@ -2447,6 +2447,16 @@
           }
         },
         {
+          "description": "Types, but never sets the terminal's size: its RESIZE only records its own.\nTakes `resize_notifications` like an observer.",
+          "name": "keep_size",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "Types, but never sets the terminal's size: its RESIZE only records its own.\nTakes `resize_notifications` like an observer.",
+            "type": "boolean"
+          }
+        },
+        {
           "description": "Watch only: never type or resize.",
           "name": "observe",
           "required": false,
