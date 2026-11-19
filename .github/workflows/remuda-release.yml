@@ -119,9 +119,14 @@ jobs:
 
   publish:
     needs: build
-    # Only the owner's own tag push publishes; a re-run of an old tag's run stops at create, its release
-    # already standing.
-    if: github.event_name == 'push' && github.ref_type == 'tag' && github.triggering_actor == github.repository_owner
+    # Only a tag the owner pushed, and a run the owner started: a re-run keeps the pusher as the actor.
+    if: >-
+      github.event_name == 'push' && github.ref_type == 'tag'
+      && github.actor == github.repository_owner && github.triggering_actor == github.repository_owner
+    # One publish at a time across tags, so the latest check below sees the one before.
+    concurrency:
+      group: remuda-release-publish
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -134,17 +139,26 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+      - name: Every target is here
+        run: |
+          for f in linux-x86_64.tar.gz linux-aarch64.tar.gz macos-aarch64.tar.gz macos-x86_64.tar.gz windows-x86_64.zip; do
+            [ -f "dist/remuda-core-$f" ] || { echo "dist/remuda-core-$f is missing: re-run the whole run, not this job"; exit 1; }
+          done
       - name: Manifest and checksums
         run: |
           RELEASES_URL="https://github.com/$GITHUB_REPOSITORY/releases" scripts/manifest dist > dist/manifest.json
           cat dist/manifest.json
           (cd dist && sha256sum remuda-core-* manifest.json > checksums.txt)
-      # A draft until every file is up, so latest/download never points at half a release.
+      # gh uploads into a draft and publishes it once every file is up, so latest/download never sees
+      # half a release; an older version published later (a recovered one) is not made latest.
       - name: Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
-            --title "remuda-core ${GITHUB_REF_NAME#remuda-v}" --generate-notes \
+          version=${GITHUB_REF_NAME#remuda-v}
+          current=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName -q .tagName 2>/dev/null || true)
+          newest=$(printf '%s\n%s\n' "${current#remuda-v}" "$version" | sort -V | tail -1)
+          latest=$([ -z "$current" ] || [ "$newest" = "$version" ] && echo true || echo false)
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --latest="$latest" \
+            --title "remuda-core $version" --generate-notes \
             dist/remuda-core-* dist/manifest.json dist/checksums.txt distribution/install.sh distribution/install.ps1
-          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest

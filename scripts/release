@@ -3,39 +3,49 @@
 #
 #   scripts/release 0.2.0
 #
-# Sets the version, marks the API as released, commits, pushes master, waits for its CI, then
-# tags remuda-v<version>; the tag starts .github/workflows/remuda-release.yml. Red CI tags nothing.
+# Sets the version, marks the API as released, commits, pushes master, waits for that commit's CI,
+# then tags that very commit remuda-v<version>; the tag starts .github/workflows/remuda-release.yml.
+# Red CI tags nothing. Run it again after a failure: it goes on from the release commit it made.
 set -eu
 version=${1:?usage: scripts/release <version>}
-tag=remuda-v$version
 echo "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "release: $version is not X.Y.Z" >&2; exit 1; }
+tag=remuda-v$version
 repo=dev1antdev/remuda-core
 fail() { echo "release: $*" >&2; exit 1; }
 cd "$(git rev-parse --show-toplevel)"
 
 [ -z "$(git status --porcelain)" ] || fail "the working tree must be clean"
 [ "$(git branch --show-current)" = master ] || fail "release from master"
-git fetch origin master --tags
-git merge-base --is-ancestor origin/master HEAD || fail "behind origin/master"
-if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then fail "$tag already exists"; fi
+git fetch origin master
+[ -z "$(git ls-remote --tags origin "refs/tags/$tag")" ] || fail "$tag is already on origin"
 
-sed -i.bak "s/^version = \".*\"/version = \"$version\"/" crates/remuda-core/Cargo.toml
-rm -f crates/remuda-core/Cargo.toml.bak
-RC_UPDATE_SCHEMA=1 cargo test -p remuda-core --test m0
-cp schema/rc.openrpc.json schema/released.openrpc.json
-git add Cargo.lock crates/remuda-core/Cargo.toml schema
-git commit -m "chore: release $version"
-git push origin HEAD:master
-
+if [ "$(git log -1 --format=%s)" = "chore: release $version" ]; then
+  echo "release: going on from the release commit $(git rev-parse --short HEAD)"
+else
+  git merge-base --is-ancestor origin/master HEAD || fail "behind origin/master"
+  if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then fail "a local $tag exists: delete it first"; fi
+  sed -i.bak "s/^version = \".*\"/version = \"$version\"/" crates/remuda-core/Cargo.toml
+  rm -f crates/remuda-core/Cargo.toml.bak
+  RC_UPDATE_SCHEMA=1 cargo test -p remuda-core --test m0
+  cp schema/rc.openrpc.json schema/released.openrpc.json
+  git add Cargo.lock crates/remuda-core/Cargo.toml schema
+  git commit -m "chore: release $version"
+fi
 sha=$(git rev-parse HEAD)
+git push origin "$sha:refs/heads/master"
+
 run=
 for _ in $(seq 60); do
-  run=$(gh run list --repo "$repo" --workflow ci --commit "$sha" --json databaseId -q '.[0].databaseId')
+  run=$(gh run list --repo "$repo" --workflow ci --event push --branch master --commit "$sha" --json databaseId -q '.[0].databaseId')
   [ -z "$run" ] || break
   sleep 5
 done
-[ -n "$run" ] || fail "no CI run for $sha"
+[ -n "$run" ] || fail "no CI run for $sha yet: run this again"
 gh run watch "$run" --repo "$repo" --exit-status --interval 30 || fail "CI failed on $sha: nothing tagged"
-git tag -a "$tag" -m "remuda-core $version"
-git push origin "$tag"
-echo "$tag tagged: .github/workflows/remuda-release.yml builds and publishes it"
+if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+  [ "$(git rev-parse "$tag^{commit}")" = "$sha" ] || fail "the local $tag is not on $sha"
+else
+  git tag -a "$tag" -m "remuda-core $version" "$sha"
+fi
+git push origin "refs/tags/$tag"
+echo "$tag tagged on $sha: .github/workflows/remuda-release.yml builds and publishes it"
