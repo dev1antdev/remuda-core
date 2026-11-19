@@ -61,6 +61,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   anything in the bundle runs, for any release address); `docs/security.md` says so. `macos_bundle.rs` still tries Herdr's
   team first, upstream's lines kept as they are: no build of ours carries it.
 - `distribution/macos-signing.md`: a line saying it describes upstream's release, not ours.
+- `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
+  `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
 ## Taking upstream's changes
 
