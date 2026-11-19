@@ -36,14 +36,17 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 
 ## Taking upstream's changes
 
-For each upstream release tag, on a branch of its own:
+For each upstream release tag, on a branch of its own, as one chain so nothing merges into the
+wrong branch when a step fails:
 
 ```sh
-git fetch origin
-git fetch upstream tag vX.Y.Z --no-tags
-git switch -c upstream-vX.Y.Z origin/master
-git merge --no-ff vX.Y.Z -m "chore: merge upstream vX.Y.Z"
+git fetch origin && git fetch upstream tag vX.Y.Z --no-tags &&
+  git switch -c upstream-vX.Y.Z origin/master &&
+  git merge --no-ff vX.Y.Z -m "chore: merge upstream vX.Y.Z"
 ```
+
+When `upstream-vX.Y.Z` already exists (a sync begun before), do not run the chain again: switch to
+that branch, check `git branch --show-current` names it, and go on from where it stopped.
 
 Resolve each conflict by keeping upstream's change and applying ours on top of it, never by taking
 our side of a whole hunk or file (`-X ours`, `checkout --ours`), and update the list above if the
