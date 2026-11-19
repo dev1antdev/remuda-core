@@ -58,8 +58,6 @@ pub struct State {
     pub gates: HashMap<u32, crate::input::Gate>,
     pub queues: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub sends: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
-    /// Keys waiting for a person's quiet, in order, without holding `queues`.
-    pub quiet_waits: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub foreground: HashMap<u32, Vec<oneshot::Sender<i32>>>,
     /// Waits matching output: they get every byte viewers get.
     pub output_watch: HashMap<u32, Vec<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
