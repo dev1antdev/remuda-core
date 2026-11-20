@@ -31,6 +31,21 @@ impl Core {
     }
 }
 
+/// A foreground with nothing read yet, so `about`'s literals name only what they read and fields of ours need no line
+/// of theirs.
+impl Default for Foreground {
+    fn default() -> Foreground {
+        Foreground {
+            pid: 0,
+            name: String::new(),
+            argv: Vec::new(),
+            cwd: String::new(),
+            started_ms: None,
+            started_since_boot: None,
+        }
+    }
+}
+
 /// A terminal's program: its pid and which of the core's spawns started it (none for one the core found running).
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub(crate) struct Program {
@@ -78,10 +93,13 @@ fn in_session(_: i32, _: Option<u32>) -> bool {
 }
 
 /// A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's
-/// `/proc/sys/kernel/random/boot_id`) and the clock ticks since it (`/proc/<pid>/stat`'s starttime).
+/// `/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link, "" on a
+/// kernel without them), whose boot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the
+/// boot (`/proc/<pid>/stat`'s starttime).
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct SinceBoot {
     pub boot_id: String,
+    pub time_ns: String,
     pub ticks: u64,
 }
 
@@ -89,7 +107,8 @@ pub struct SinceBoot {
 /// the OS stored and no step moves it, and this tells nothing.
 #[cfg(target_os = "linux")]
 pub fn since_boot(pid: i32) -> Option<SinceBoot> {
-    Some(SinceBoot { boot_id: crate::platform::boot_id().ok().flatten()?, ticks: start_ticks(pid)? })
+    let time_ns = std::fs::read_link("/proc/self/ns/time").map(|ns| ns.display().to_string()).unwrap_or_default();
+    Some(SinceBoot { boot_id: crate::platform::boot_id().ok().flatten()?, time_ns, ticks: start_ticks(pid)? })
 }
 
 #[cfg(not(target_os = "linux"))]

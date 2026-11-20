@@ -478,7 +478,23 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
         let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").unwrap();
         let stat = std::fs::read_to_string(format!("/proc/{sleep}/stat")).unwrap();
         let ticks: u64 = stat[stat.rfind(')').unwrap() + 2..].split(' ').nth(19).unwrap().parse().unwrap();
-        assert_eq!((since["boot_id"].as_str(), since["ticks"].as_u64()), (Some(boot.trim()), Some(ticks)), "{front}");
+        let ns = std::fs::read_link("/proc/self/ns/time").map(|ns| ns.display().to_string()).unwrap_or_default();
+        let told = (since["boot_id"].as_str(), since["time_ns"].as_str(), since["ticks"].as_u64());
+        assert_eq!(told, (Some(boot.trim()), Some(ns.as_str()), Some(ticks)), "{front}");
+        // a reader in another time namespace sees the ticks shifted by its boot-time offset, and another namespace
+        let elsewhere = std::process::Command::new("unshare")
+            .args(["--user", "--map-root-user", "--time", "--boottime", "60", "--fork", "sh", "-c"])
+            .arg(format!("readlink /proc/self/ns/time; cut -d' ' -f22 /proc/{sleep}/stat"))
+            .output();
+        match elsewhere {
+            Ok(out) if out.status.success() => {
+                let out = String::from_utf8_lossy(&out.stdout);
+                let (their_ns, their_ticks) = out.trim().split_once('\n').unwrap();
+                assert_ne!(their_ns, ns, "{out}");
+                assert_ne!(their_ticks.parse::<u64>().unwrap(), ticks, "{out}");
+            }
+            _ => eprintln!("no time namespace of our own to read from here: the shifted ticks go unchecked"),
+        }
     } else {
         assert!(since.is_null(), "{front}");
     }

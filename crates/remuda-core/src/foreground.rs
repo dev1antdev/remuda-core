@@ -33,7 +33,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     let argv =
         cmdline.split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
     let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?.display().to_string();
-    Some(Foreground { pid, name, argv, cwd, started_ms: None, started_since_boot: None })
+    Some(Foreground { pid, name, argv, cwd, ..Default::default() })
 }
 
 /// A pseudo console has no foreground group: this is the program the
@@ -95,7 +95,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
         .into_iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
-    Some(Foreground { pid, name, argv, cwd, started_ms: None, started_since_boot: None })
+    Some(Foreground { pid, name, argv, cwd, ..Default::default() })
 }
 
 #[cfg(target_os = "macos")]
@@ -110,14 +110,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     }
     let path = unsafe { std::ffi::CStr::from_ptr(vnode.pvi_cdir.vip_path.as_ptr().cast()) };
     let (argv, _) = procargs(pid)?;
-    Some(Foreground {
-        pid,
-        name,
-        argv,
-        cwd: path.to_string_lossy().into_owned(),
-        started_ms: None,
-        started_since_boot: None,
-    })
+    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), ..Default::default() })
 }
 
 /// KERN_PROCARGS2: argc, the executable path, the arguments, then the
@@ -220,8 +213,7 @@ mod tests {
                 name: shell.into(),
                 argv: vec![shell.into()],
                 cwd: "/".into(),
-                started_ms: None,
-                started_since_boot: None,
+                ..Default::default()
             };
             assert!(shell_root(&root), "{shell}");
             for arg in ["-i", "-li", "--login", "--no-config"] {

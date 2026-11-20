@@ -194,18 +194,26 @@ missing `started_ms` means unknown for that terminal (an older core there, or an
 OS that would not tell), whatever the first core's hello said.
 
 `started_since_boot` in a terminal's `foreground`, on Linux alone, is that
-process's start as its boot counts it, `{boot_id, ticks}`: the boot
-(`/proc/sys/kernel/random/boot_id`) and the clock ticks from it to the start
-(`/proc/<pid>/stat`'s starttime). No step of the wall clock moves it, where
-`started_ms` moves with one: after the clock went back by as much as a later
-process was born after the one before, both carry one `started_ms`, and only
-this tells them apart, compared whole with what the client reads of the
-process. It is read with `started_ms`, both the same before and after the rest
-of the look. On macOS and Windows `started_ms` is already the creation the OS
-stored when the process began (`proc_pidinfo`'s start, the creation FILETIME),
-which no step moves, and this field is absent. Cores advertise
-`foreground_since_boot` in `hello.features`; a missing field on a Linux
-terminal means unknown, as `started_ms`'s does.
+process's start as its boot counts it, `{boot_id, time_ns, ticks}`: the boot
+(`/proc/sys/kernel/random/boot_id`), the time namespace the core read it in
+(the link `/proc/self/ns/time` names, empty on a kernel without them) and the
+clock ticks from the boot to the start (`/proc/<pid>/stat`'s starttime). No
+step of the wall clock moves it, where `started_ms` moves with one: after the
+clock went back by as much as a later process was born after the one before,
+both carry one `started_ms`, and only this tells them apart, compared whole
+with what the client reads of the process. Linux adds the reader's time
+namespace's boot-time offset to the ticks it shows, so a client compares the
+ticks only when it reads them in the namespace `time_ns` names; read in
+another, they tell nothing. It is read with `started_ms`, both the same before and after the rest
+of the look. On macOS and Windows this field is absent: `started_ms` there is
+the creation the OS stored when the process began (`proc_pidinfo`'s start, the
+creation FILETIME), which no later step moves, but a step back between two
+births still gives the later process the earlier one's `started_ms`, and
+nothing there tells the two apart (a known limit). Cores advertise
+`foreground_since_boot` in `hello.features`; a terminal relayed from an added
+machine carries its own core's `started_since_boot`, counted from that
+machine's boot, so a missing one means unknown for that terminal and a present
+one may arrive through a first core that does not advertise the feature.
 
 ## Events
 
