@@ -208,10 +208,7 @@ fn an_output_watch_outlives_a_kept_terminal_restarting() {
     assert_eq!(line(&mut events), "one FAIL");
     let old = get(&s, &t)["pid"].as_i64().unwrap();
     s.json(&["send", &t, "go"]);
-    wait_until("replacement shell", || {
-        let r = get(&s, &t);
-        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
-    });
+    replaced(&s, &t, old);
     s.json(&["send", &t, "printf 'two FAIL\\n'"]);
     let mut heard = line(&mut events);
     if heard == "gone FAIL" {
@@ -223,6 +220,14 @@ fn an_output_watch_outlives_a_kept_terminal_restarting() {
 /// The process group in front of `t`, once the core has looked (0 before).
 fn in_front(s: &Session, t: &str) -> i64 {
     get(s, t)["foreground"]["pid"].as_i64().unwrap_or(0)
+}
+
+/// Waits for keep to give the terminal a new shell in place of the program `old` was.
+fn replaced(s: &Session, t: &str, old: i64) {
+    wait_until("replacement shell", || {
+        let r = get(s, t);
+        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
+    });
 }
 
 /// `terminal.send` naming the process it is for (API only: the CLI has no flag for it).
@@ -326,9 +331,6 @@ fn the_shell_keep_gives_a_lost_literal_run_is_not_literal() {
     let old = get(&s, &t)["pid"].as_i64().unwrap();
     let holder = s.json(&["server", "status"])["holder"]["pid"].as_i64().unwrap();
     unsafe { libc::kill(holder as i32, libc::SIGKILL) };
-    wait_until("replacement shell", || {
-        let r = get(&s, &t);
-        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
-    });
+    replaced(&s, &t, old);
     assert_eq!(get(&s, &t)["literal"], false);
 }

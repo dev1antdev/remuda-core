@@ -148,14 +148,6 @@ a core; a core that added this one is never asked to run (`machine_unknown`). Cl
 a core that lists it: an older core ignores it and may start a template in the
 program's place. The CLI has no flag for it.
 
-A terminal's record carries `literal`: true while it runs the program a
-`literal: true` run started, false for any other run and once `keep` has given it
-this machine's shell in place of that program. So a client can tell a program it
-started as it is, a shell's `sh -c '…'` among them, from the shell that later
-took its place, whatever their argv. Cores advertise `literal_record` in
-`hello.features`; an older core's record has no `literal`, and a record relayed
-from an added machine is that core's own.
-
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,
@@ -230,6 +222,16 @@ or Windows reports session shutdown. During recovery, send/keys/interrupt/attach
 return `unavailable`: "lost, waiting for its new shell"; retry after `restarted`.
 Server stop parks kept terminals; the next core start gives them fresh shells.
 Waits end on `lost` as on `finished`: they follow the program, not the kept record.
+
+A terminal's record carries `literal`: true for a terminal a `literal: true`
+run started, false for any other, and false once keep has given it this
+machine's shell in place of that program. It stays true while the terminal waits
+for that shell (`pid` null, a `reason` set) and once it has finished, though
+nothing runs then: read `pid` and `reason` with it. So a client tells the
+program it started as it is, a shell's `sh -c '…'` among them, from the shell
+keep later gave the terminal, whatever their argv. Cores advertise
+`literal_record` in `hello.features`; an older core's record has no `literal`,
+and a record relayed from an added machine is that core's own.
 
 An initial spawn that times out remains claimed with `reason: "spawn_pending"`;
 input/attach are unavailable until the holder answers. It may already be running,
