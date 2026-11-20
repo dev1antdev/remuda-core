@@ -148,14 +148,17 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   of its own, "Call options newer cores add", before Events (the `foreground` paragraph moved there
   too), the generated schema; the end-to-end tests are ours, in `tests/remuda.rs`.
 - A terminal's record carries `literal` (`literal_record` in hello's features): true for a terminal
-  a `literal` run started, false for any other and once keep gave it this machine's shell in place
-  of that program (true still while it waits for that shell or has finished: `pid` and `reason`
-  say whether anything runs), so remuda tells a scene pane's command (a shell's `sh -c '…'` too)
-  from the shell a reboot gives that pane, whatever their argv. In upstream's files the field in
-  `terminals.rs`'s `Terminal` and `NewTerminal` with its line in `Registry::create`,
-  `literal: p.literal` in `api/run.rs`, its reset beside `template` in `kept.rs`'s replacement,
-  the feature in `api.rs`, a paragraph in `schema/README.md`'s Events after keep's, the generated
-  schema; the tests are ours, in `tests/remuda.rs`.
+  a `literal` run started, false for any other and once keep's shell has started in place of that
+  program (true still while it waits for that shell, through a failed replacement, or has finished:
+  `pid` and `reason` say whether anything runs), so remuda tells a scene pane's command (a shell's
+  `sh -c '…'` too) from the shell a reboot gives that pane, whatever their argv; a terminal a core
+  without the feature started reads false once an update adopts it, so remuda runs `literal` only
+  on a core with both features. In upstream's files the field in `terminals.rs`'s `Terminal` and
+  `NewTerminal` with its line in `Registry::create`, `literal: p.literal` in `api/run.rs`, its
+  reset in `runtime.rs`'s `spawn_result` for a spawn ending a loss (a `reason` other than
+  `spawn_pending`, the adoption after a core crash included), the feature in `api.rs`, a paragraph
+  in `schema/README.md`'s Events after keep's, the generated schema; the tests are ours, in
+  `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

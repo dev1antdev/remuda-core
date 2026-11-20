@@ -334,3 +334,22 @@ fn the_shell_keep_gives_a_lost_literal_run_is_not_literal() {
     replaced(&s, &t, old);
     assert_eq!(get(&s, &t)["literal"], false);
 }
+
+#[test]
+fn a_literal_run_stays_literal_until_keeps_shell_has_started() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut s = session("0");
+    let shell = s.root.join("shell");
+    s.env.push(("SHELL".into(), shell.display().to_string()));
+    let reply = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true, "keep": true}));
+    let t = reply["result"]["address"].as_str().unwrap().to_string();
+    s.json(&["server", "stop"]);
+    get(&s, &t);
+    std::thread::sleep(Duration::from_secs(2)); // its shell is missing: the first replacement fails
+    let r = get(&s, &t);
+    assert!(r["pid"].is_null() && r["reason"].is_string() && r["literal"] == true, "{r}");
+    std::fs::write(&shell, "#!/bin/sh\nexec /bin/sh\n").unwrap();
+    std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o700)).unwrap();
+    wait_until_for("keep's shell", Duration::from_secs(30), || get(&s, &t)["pid"].is_number());
+    assert_eq!(get(&s, &t)["literal"], false);
+}

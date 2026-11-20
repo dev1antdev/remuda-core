@@ -224,14 +224,17 @@ Server stop parks kept terminals; the next core start gives them fresh shells.
 Waits end on `lost` as on `finished`: they follow the program, not the kept record.
 
 A terminal's record carries `literal`: true for a terminal a `literal: true`
-run started, false for any other, and false once keep has given it this
-machine's shell in place of that program. It stays true while the terminal waits
-for that shell (`pid` null, a `reason` set) and once it has finished, though
-nothing runs then: read `pid` and `reason` with it. So a client tells the
-program it started as it is, a shell's `sh -c '…'` among them, from the shell
-keep later gave the terminal, whatever their argv. Cores advertise
-`literal_record` in `hello.features`; an older core's record has no `literal`,
-and a record relayed from an added machine is that core's own.
+run started, false for any other, and false once keep's shell has started in
+place of that program (`restarted` carries it). It stays true while the terminal
+waits for that shell (`pid` null, a `reason` set), through replacements that
+fail, and once it has finished, though nothing runs then: read `pid` and
+`reason` with it. So a client tells the program it started as it is, a shell's
+`sh -c '…'` among them, from the shell keep later gave the terminal, whatever
+their argv. Cores advertise `literal_record` in `hello.features`. An older
+core's record has no `literal`, and a terminal it started reads false once an
+update adopts it, so a client runs `literal` only on a core that lists both
+`run_literal` and `literal_record`; a record relayed from an added machine is
+that core's own.
 
 An initial spawn that times out remains claimed with `reason: "spawn_pending"`;
 input/attach are unavailable until the holder answers. It may already be running,
