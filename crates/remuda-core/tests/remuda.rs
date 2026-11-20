@@ -261,16 +261,12 @@ fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
     wait_until("a send naming what is in front goes in", || text(&s, &t).contains("SENT-42"));
 }
 
-fn state(s: &Session, t: &str) -> serde_json::Value {
-    get(s, t)["status"]["state"].clone()
-}
-
 #[test]
 fn a_send_naming_done_goes_to_a_program_that_is_done_and_idle_still_does_not() {
     let mut s = session("0");
     s.env.push(("RC_STARTED_MS".into(), "100".into()));
     let t = run(&s, &["sh", "-c", &script(&s, "r state=done; read -r l; echo got:$l; sleep 100")]);
-    wait_until("done", || state(&s, &t) == "done");
+    wait_until("done", || get(&s, &t)["status"]["state"] == "done");
     let (code, err) = s.err(&["send", "--if", "idle", &t, "nope"]);
     assert_eq!((code, err["error"]["kind"].as_str()), (10, Some("status_mismatch")), "{err}");
     let sent = s.json(&["send", "--if", "done", &t, "yes"]);
@@ -284,7 +280,7 @@ fn a_send_naming_done_types_nothing_once_the_program_works_while_a_draft_waited(
     let mut s = session("0");
     s.env.push(("RC_DRAFT_MS".into(), "2000".into()));
     let t = run(&s, &["sh", "-c", &script(&s, "r state=done; w go; r state=working; sleep 100")]);
-    wait_until("done", || state(&s, &t) == "done");
+    wait_until("done", || get(&s, &t)["status"]["state"] == "done");
     let mut person = Viewer::attach(&s, &t, 80, 24, json!({}));
     person.typed(b"draft");
     person.shows("draft");
@@ -297,7 +293,7 @@ fn a_send_naming_done_types_nothing_once_the_program_works_while_a_draft_waited(
         assert_eq!(reply["error"]["data"]["kind"], "status_mismatch", "{reply}");
         assert_eq!(reply["error"]["data"]["hint"], "nothing was typed", "{reply}");
     });
-    assert_eq!(state(&s, &t), "working");
+    assert_eq!(get(&s, &t)["status"]["state"], "working");
     std::thread::sleep(Duration::from_millis(300));
     assert!(!text(&s, &t).contains("SENT"), "typed into a turn: {}", text(&s, &t));
 }

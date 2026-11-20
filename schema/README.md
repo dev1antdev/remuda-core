@@ -155,8 +155,9 @@ finishing: another word, or none, is `status_mismatch` and nothing is typed, so 
 send for a program at rest (`done`, say) never lands in a turn a person started
 meanwhile. `blocked` still needs `force`. Cores advertise `send_if_any_status` in
 `hello.features`. An older core refuses the three newer words as `invalid_params`
-and types nothing, also behind a relay, which passes `if` on as it is: read
-`invalid_params` as an older core, whatever the first core's hello said.
+and types nothing, and a relay refuses them the same way towards a core that does
+not list the feature, its hint naming the update: read `invalid_params` as an
+older core, whatever the first core's hello said.
 
 ## Events
 
