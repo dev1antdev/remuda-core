@@ -397,9 +397,13 @@
         "type": "object"
       },
       "IdleOrWorking": {
+        "description": "A status word as a program reports it (OSC 7501).",
         "enum": [
           "idle",
-          "working"
+          "working",
+          "done",
+          "blocked",
+          "error"
         ],
         "type": "string"
       },
@@ -902,6 +906,13 @@
             },
             "type": "object"
           },
+          "literal": {
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.\nAbsent for a record a core without `literal_record` wrote, though this one loaded it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "name": {
             "type": [
               "string",
@@ -1390,6 +1401,13 @@
             },
             "type": "object"
           },
+          "literal": {
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.\nAbsent for a record a core without `literal_record` wrote, though this one loaded it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "name": {
             "type": [
               "string",
@@ -1609,7 +1627,7 @@
       "name": "Apache-2.0"
     },
     "title": "remuda-core",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "methods": [
     {
@@ -1763,7 +1781,7 @@
       }
     },
     {
-      "description": "Start a program in a new terminal; or, when argv[0] names a template, start its command and send its body plus the rest of argv as the first message once the agent is ready. Returns once it runs (and the first message is sent or not).",
+      "description": "Start a program in a new terminal; or, when argv[0] names a template, start its command and send its body plus the rest of argv as the first message once the agent is ready. With `literal`, argv starts as it is and no template is looked up. Returns once it runs (and the first message is sent or not).",
       "errors": [
         {
           "code": -32602,
@@ -1820,6 +1838,13 @@
             "kind": "config"
           },
           "message": "config"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "needs_update"
+          },
+          "message": "needs_update"
         }
       ],
       "name": "terminal.run",
@@ -1934,6 +1959,15 @@
               "string",
               "null"
             ]
+          }
+        },
+        {
+          "description": "Start argv as it is: no template is looked up by its first word and no first message is sent, so a\nmissing program is `spawn_failed`. Needs argv, not line. API only: a client names it after checking\n`run_literal` in hello.",
+          "name": "literal",
+          "required": false,
+          "schema": {
+            "description": "Start argv as it is: no template is looked up by its first word and no first message is sent, so a\nmissing program is `spawn_failed`. Needs argv, not line. API only: a client names it after checking\n`run_literal` in hello.",
+            "type": "boolean"
           }
         },
         {
@@ -2609,7 +2643,7 @@
       }
     },
     {
-      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`.",
+      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (the text may have reached the terminal and its Enter was held back; keys a person pressed meanwhile still go).",
       "errors": [
         {
           "code": -32000,
@@ -2654,6 +2688,13 @@
           "message": "status_mismatch"
         },
         {
+          "code": -32000,
+          "data": {
+            "kind": "not_submitted"
+          },
+          "message": "not_submitted"
+        },
+        {
           "code": -32602,
           "data": {
             "kind": "invalid_params"
@@ -2673,6 +2714,13 @@
             "kind": "cancelled"
           },
           "message": "cancelled"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "needs_update"
+          },
+          "message": "needs_update"
         }
       ],
       "name": "terminal.send",
@@ -2698,6 +2746,19 @@
             "default": false,
             "description": "Type even if the program is blocked (it may answer its dialog).",
             "type": "boolean"
+          }
+        },
+        {
+          "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back). API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
+          "name": "foreground",
+          "required": false,
+          "schema": {
+            "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back). API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         {
