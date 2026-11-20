@@ -266,6 +266,62 @@ fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
     wait_until("a send naming what is in front goes in", || text(&s, &t).contains("SENT-42"));
 }
 
+#[test]
+fn a_send_naming_done_goes_to_a_program_that_is_done_and_idle_still_does_not() {
+    let mut s = session("0");
+    s.env.push(("RC_STARTED_MS".into(), "100".into()));
+    let program = "r state=done; read -r l; echo got:$l; read -r l; echo got:$l; sleep 100";
+    let t = run(&s, &["sh", "-c", &script(&s, program)]);
+    wait_until("done", || get(&s, &t)["status"]["state"] == "done");
+    let (code, err) = s.err(&["send", "--if", "idle", &t, "nope"]);
+    assert_eq!((code, err["error"]["kind"].as_str()), (10, Some("status_mismatch")), "{err}");
+    let sent = s.json(&["send", "--if", "done", &t, "yes"]);
+    assert_eq!(sent["status"], "done", "{sent}");
+    wait_until("the text went in", || text(&s, &t).contains("got:yes"));
+    wait_until("the program in front", || in_front(&s, &t) > 0);
+    let guarded = json!({"terminal": t, "text": "again", "if": "done", "foreground": in_front(&s, &t)});
+    let reply = s.connect().call(1, "terminal.send", guarded);
+    assert!(reply["error"].is_null(), "{reply}");
+    wait_until("the text checked again after the look went in", || text(&s, &t).contains("got:again"));
+    assert!(!text(&s, &t).contains("nope"), "{}", text(&s, &t));
+}
+
+#[test]
+fn a_send_naming_done_to_a_blocked_program_is_refused_as_blocked_unless_forced() {
+    let s = session("0");
+    let t = run(&s, &["sh", "-c", &script(&s, "r state=blocked:kind=permission; sleep 100")]);
+    wait_until("blocked", || get(&s, &t)["status"]["state"] == "blocked");
+    let (code, err) = s.err(&["send", "--if", "done", &t, "nope"]);
+    assert_eq!((code, err["error"]["kind"].as_str()), (9, Some("blocked")), "{err}");
+    let (code, err) = s.err(&["send", "--force", "--if", "done", &t, "nope"]);
+    assert_eq!((code, err["error"]["kind"].as_str()), (10, Some("status_mismatch")), "{err}");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!text(&s, &t).contains("nope"), "{}", text(&s, &t));
+}
+
+#[test]
+fn a_send_naming_done_types_nothing_once_the_program_works_while_a_draft_waited() {
+    let mut s = session("0");
+    s.env.push(("RC_DRAFT_MS".into(), "2000".into()));
+    let t = run(&s, &["sh", "-c", &script(&s, "r state=done; w go; r state=working; sleep 100")]);
+    wait_until("done", || get(&s, &t)["status"]["state"] == "done");
+    let mut person = Viewer::attach(&s, &t, 80, 24, json!({}));
+    person.typed(b"draft");
+    person.shows("draft");
+    std::thread::scope(|scope| {
+        let send =
+            scope.spawn(|| s.connect().call(1, "terminal.send", json!({"terminal": t, "text": "SENT", "if": "done"})));
+        std::thread::sleep(Duration::from_millis(300));
+        touch(&s, "go");
+        let reply = send.join().unwrap();
+        assert_eq!(reply["error"]["data"]["kind"], "status_mismatch", "{reply}");
+        assert_eq!(reply["error"]["data"]["hint"], "nothing was typed", "{reply}");
+    });
+    assert_eq!(get(&s, &t)["status"]["state"], "working");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!text(&s, &t).contains("SENT"), "typed into a turn: {}", text(&s, &t));
+}
+
 /// A template named after `name`, whose command says so if it ever runs (no first message to wait to send).
 fn template_named(s: &Session, name: &str) {
     let dir = s.root.join("config/remuda-core/templates");

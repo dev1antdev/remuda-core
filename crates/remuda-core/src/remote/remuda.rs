@@ -12,13 +12,24 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
 /// A call carrying what an older core would ignore, to its harm, towards a core without the feature: a send that
 /// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
 /// like the program). A run's `literal` is checked here first, as the core there would check it, so a malformed one
-/// reaches no core. `added`: a machine this core added, which `rc machine update` reaches; else a core that added us
-/// (which is never asked to run: `route`).
+/// reaches no core. A send's `if` naming a status word newer than idle and working is refused as that core would
+/// refuse it, `invalid_params` (which a client reads as an older core), with the update in its hint; a terminal it
+/// relays further (`worker/t1`) is left to the core that types (a relay passes `if` on as it is). `added`: a
+/// machine this core added, which `rc machine update` reaches; else a core that added us (which is never asked to
+/// run: `route`).
 pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
     if method == "terminal.run"
         && let Some(invalid) = literal_invalid(params)
     {
         return Some(invalid);
+    }
+    if method == "terminal.send"
+        && matches!(params["if"].as_str(), Some("done" | "blocked" | "error"))
+        && !params["terminal"].as_str().is_some_and(|t| t.contains('/'))
+        && !line.features.iter().any(|f| f == "send_if_any_status")
+    {
+        let older = older(name, added, "its if takes idle or working alone");
+        return Some(RpcError::invalid_params(older.message).with_hint(older.hint));
     }
     let (feature, cannot) = match method {
         "terminal.send" if !params["foreground"].is_null() => {
@@ -70,6 +81,25 @@ mod tests {
         assert!(refused(&current, "away", true, "terminal.send", &send).is_none());
         let plain = json!({"terminal": "t1", "text": "hi"});
         assert!(refused(&old, "away", true, "terminal.send", &plain).is_none());
+    }
+
+    #[test]
+    fn a_send_naming_a_newer_status_is_invalid_params_towards_an_older_core_with_its_update() {
+        let (frames, _rx) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": ["send_foreground"]}));
+        let current = Line::new(frames, &json!({"features": ["send_if_any_status"]}));
+        let done = json!({"terminal": "t1", "text": "hi", "if": "done"});
+        let refusal = refused(&old, "away", true, "terminal.send", &done).unwrap();
+        assert_eq!((refusal.kind.as_str(), refusal.code), ("invalid_params", -32602));
+        assert_eq!(refusal.hint, "rc machine update away");
+        assert_eq!(refused(&old, "lead", false, "terminal.send", &done).unwrap().hint, "update rc on lead");
+        assert!(refused(&current, "away", true, "terminal.send", &done).is_none());
+        let further = json!({"terminal": "worker/t1", "text": "hi", "if": "done"});
+        assert!(refused(&old, "away", true, "terminal.send", &further).is_none(), "the core that types decides");
+        for word in ["idle", "working"] {
+            let send = json!({"terminal": "t1", "text": "hi", "if": word});
+            assert!(refused(&old, "away", true, "terminal.send", &send).is_none(), "{word}");
+        }
     }
 
     #[test]

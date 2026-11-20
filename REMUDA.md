@@ -41,7 +41,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
   `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`, `terminal.run`'s
-  `literal` and the record's).
+  `literal`, every status word in `terminal.send`'s `if`, the record's `literal`).
 
 ## Keeping upstream's fixes applying
 
@@ -147,6 +147,20 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `needs_update` error and the feature in `api.rs`, a paragraph in `schema/README.md` under a section
   of its own, "Call options newer cores add", before Events (the `foreground` paragraph moved there
   too), the generated schema; the end-to-end tests are ours, in `tests/remuda.rs`.
+- `terminal.send`'s `if` (`rc send --if`) takes every status word a program reports, `done`,
+  `blocked` and `error` besides `idle` and `working` (`send_if_any_status` in hello's features): a
+  send for a program at rest whose status moved while it waited for a person's draft, or by the time
+  its paste is written (checked under the lock it is written under, after any `foreground` look), is
+  refused as `status_mismatch`, nothing typed, rather than land in the turn that person started
+  (`blocked` keeps its own refusal first, unless `force`). An older core refuses the newer words as `invalid_params`, nothing typed, and a relay
+  refuses them the same way, with the update in its hint, towards the core that would type when it
+  lacks the feature (the kind kept, since remuda reads `invalid_params` as an older core). Ours:
+  `refused`'s `if` arm in `remote/remuda.rs`, and `conditional`, `paste_if` and `still` in
+  `front.rs` (with their tests); in upstream's files the three variants and a doc line on
+  `IdleOrWorking` in `api/types.rs` (its name kept, so upstream's lines still apply), the `Paste`
+  step and its arm in `input.rs`'s `type_in` with the line in `send_message` that makes a send's
+  paste one, the feature in `api.rs`, a paragraph in `schema/README.md`, the generated docs and
+  schema; the end-to-end tests are ours, in `tests/remuda.rs`.
 - A terminal's record carries `literal` (`literal_record` in hello's features): true for a terminal
   a `literal` run started, false for any other and once keep's shell has started in place of that
   program (true still while it waits for that shell, through a failed replacement, or has finished:

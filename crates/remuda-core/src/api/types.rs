@@ -63,11 +63,15 @@ pub fn word<T: clap::ValueEnum>(v: &T) -> String {
     v.to_possible_value().map(|p| p.get_name().to_string()).unwrap_or_default()
 }
 
+/// A status word as a program reports it (OSC 7501).
 #[derive(Clone, Copy, PartialEq, Debug, clap::ValueEnum, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IdleOrWorking {
     Idle,
     Working,
+    Done,
+    Blocked,
+    Error,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug, clap::ValueEnum, Serialize, Deserialize, JsonSchema)]

@@ -26,6 +26,7 @@ pub const FEATURES: &[&str] = &[
     "output_watches",
     "send_foreground",
     "run_literal",
+    "send_if_any_status",
     "literal_record",
 ];
 pub const FINISHED_LINES: usize = 1000;
