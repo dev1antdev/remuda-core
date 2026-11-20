@@ -7,8 +7,8 @@ use crate::foreground::Foreground;
 use crate::runtime::Core;
 
 impl Core {
-    /// What is in front of terminal `id`, with the terminal's program it was read under (its pid and when the core
-    /// started it, which a replacement given the same pid does not share), which the caller keeps the look for (a
+    /// What is in front of terminal `id`, with the terminal's program it was read under (its pid and which of the
+    /// core's spawns it is, which a replacement given the same pid does not share), which the caller keeps the look for (a
     /// program gone or replaced since, the look is of a terminal that is no more): the facts and the
     /// creation of the process group its holder names, read between two of its answers that name the same group, the
     /// creation read before and after the facts, and on Unix only a process of the terminal's own session (its
@@ -29,17 +29,33 @@ impl Core {
     }
 }
 
-/// A terminal's program: its pid and when the core started it.
+/// A terminal's program: its pid and which of the core's spawns started it (none for one the core found running).
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub(crate) struct Program {
     pid: Option<u32>,
-    started_ms: Option<u64>,
+    spawn: Option<u64>,
 }
 
 impl Program {
     pub(crate) fn of(t: &crate::terminals::Terminal) -> Program {
-        Program { pid: t.pid, started_ms: t.program_started_ms }
+        Program::at(t.id(), t.pid)
     }
+
+    fn at(id: u32, pid: Option<u32>) -> Program {
+        let spawn = SPAWNS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).get(&id).copied();
+        Program { pid, spawn }
+    }
+}
+
+/// The spawn that started each terminal's program, counted across the core's life and never back, unlike a clock.
+static SPAWNS: std::sync::Mutex<std::collections::BTreeMap<u32, u64>> =
+    std::sync::Mutex::new(std::collections::BTreeMap::new());
+
+/// Notes that the core started a program for terminal `id`.
+pub(crate) fn spawned(id: u32) {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let spawn = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    SPAWNS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id, spawn);
 }
 
 /// Whether `pid` is in the session `session` leads (a terminal's program, which the holder makes its session's
@@ -88,7 +104,7 @@ fn boot_ms() -> Option<u64> {
     let look = || Some((clock(libc::CLOCK_BOOTTIME)?, clock(libc::CLOCK_REALTIME)?, clock(libc::CLOCK_BOOTTIME)?));
     let kept = KEPT.load(Ordering::Relaxed);
     let Some(measured) = bracketed((0..3).map_while(|_| look())) else {
-        return (kept != 0).then_some(kept);
+        return (kept != 0 && kept / 1000 == whole).then_some(kept);
     };
     let boot = settle(kept, whole, u64::try_from(measured / 1_000_000).ok()?);
     KEPT.store(boot, Ordering::Relaxed);
@@ -183,10 +199,13 @@ mod tests {
 
     #[test]
     fn a_program_started_again_under_its_pid_is_another_program() {
-        let before = super::Program { pid: Some(7), started_ms: Some(1000) };
-        let after = super::Program { pid: Some(7), started_ms: Some(1500) };
-        assert_ne!(before, after);
-        assert_ne!(before, super::Program { pid: None, started_ms: None }, "lost");
+        let id = 4_000_000_000;
+        super::spawned(id);
+        let before = super::Program::at(id, Some(7));
+        assert_eq!(super::Program::at(id, Some(7)), before);
+        assert_ne!(super::Program::at(id, None), before, "lost");
+        super::spawned(id);
+        assert_ne!(super::Program::at(id, Some(7)), before, "the same pid started again, whatever the clock says");
     }
 
     #[cfg(unix)]

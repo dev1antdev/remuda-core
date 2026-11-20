@@ -171,7 +171,7 @@ tell, read within a millisecond), so its second is `ps -o lstart`'s or the next,
 and a step of the wall clock moves it as it moves ps's (the core tells each
 terminal's foreground again once); on Windows the creation FILETIME. A look the
 core took is told only while the terminal still runs the program it was taken
-under (the same pid, started by the core at the same moment). It tells the process in front from a later one given the same pid, so a
+under (the same pid, from the same spawn). It tells the process in front from a later one given the same pid, so a
 client that reads a process itself (its session files, say) can check that it
 read the one the core saw: a start that differs is another process, or one it
 cannot tell, never the same. A second alone does not tell two processes that

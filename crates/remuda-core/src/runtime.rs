@@ -714,6 +714,7 @@ impl Core {
                 }
                 t.pid = Some(pid);
                 t.program_started_ms = Some(now_ms());
+                crate::started::spawned(id);
                 t.reason = None;
                 t.exit_code = None;
                 t.signal = None;
