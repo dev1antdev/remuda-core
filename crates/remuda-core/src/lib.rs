@@ -28,6 +28,7 @@ mod restart;
 pub mod rpc;
 pub mod runtime;
 pub mod server;
+pub mod started;
 pub mod status;
 pub mod stitch;
 pub mod styled;

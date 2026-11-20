@@ -41,7 +41,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
   `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`, `terminal.run`'s
-  `literal`, every status word in `terminal.send`'s `if`).
+  `literal`, every status word in `terminal.send`'s `if`, the foreground's `started_ms`).
 
 ## Keeping upstream's fixes applying
 
@@ -161,6 +161,15 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   step and its arm in `input.rs`'s `type_in` with the line in `send_message` that makes a send's
   paste one, the feature in `api.rs`, a paragraph in `schema/README.md`, the generated docs and
   schema; the end-to-end tests are ours, in `tests/remuda.rs`.
+- A terminal's `foreground` carries `started_ms` (`foreground_started` in hello's features): when
+  that process was created, unix ms, as the OS records it (Linux `/proc/<pid>/stat`'s start with
+  `/proc/stat`'s boot time, as ps reckons `lstart`; macOS `proc_pidinfo`'s BSD info; Windows
+  `GetProcessTimes`), so remuda tells the process the core saw from a later one given its pid
+  before it reads that process's session. Ours: `remuda-core/src/started.rs` (`of`, with its
+  test); in upstream's files the field and `started_ms: crate::started::of(pid)` in the three
+  `about`s of `foreground.rs` (and `None` in its test's literal), `pub mod started;` in `lib.rs`,
+  the feature in `api.rs`, the `foreground` row and a section of its own, "Fields newer cores add",
+  in `schema/README.md`, the generated schema; the end-to-end test is ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

@@ -161,6 +161,17 @@ and types nothing, and a relay refuses them the same way, its hint naming the
 update, when the core that would type does not list the feature: read
 `invalid_params` as an older core, whatever the first core's hello said.
 
+## Fields newer cores add
+
+`started_ms` in a terminal's `foreground` is when that process was created, unix
+milliseconds, as the OS records it: on Unix the start `ps -o lstart` prints (its
+second is that one's; on Linux the boot time plus the start since boot, as ps
+reckons it), on Windows the creation FILETIME. It tells the process in front from
+a later one given the same pid, so a client that reads a process itself (its
+session files, say) can check that it read the one the core saw. Cores advertise
+`foreground_started` in `hello.features`; it is absent where the OS would not
+tell, and from older cores.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,
@@ -188,7 +199,7 @@ Each event's `data`, and how to apply it to a snapshot:
 | `title` | `{title}` | set `title` |
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
-| `foreground` | `{pid, name, argv, cwd}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
+| `foreground` | `{pid, name, argv, cwd, started_ms}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
 | `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
 
 `events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`

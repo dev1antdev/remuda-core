@@ -363,3 +363,55 @@ fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
         assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");
     }
 }
+
+/// `ps -o lstart` of `pid` in UTC, as unix seconds: how a client reading the process itself tells its start.
+fn lstart(pid: i64) -> i64 {
+    let out = std::process::Command::new("ps")
+        .args(["-o", "lstart=", "-p", &pid.to_string()])
+        .env("LC_ALL", "C")
+        .env("TZ", "UTC")
+        .output()
+        .unwrap();
+    let text = String::from_utf8(out.stdout).unwrap();
+    let mut words = text.split_whitespace().skip(1); // the weekday
+    let name = words.next().unwrap();
+    let month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        .iter()
+        .position(|m| *m == name)
+        .unwrap() as u32
+        + 1;
+    let day: u32 = words.next().unwrap().parse().unwrap();
+    let clock: Vec<i64> = words.next().unwrap().split(':').map(|n| n.parse().unwrap()).collect();
+    let year: i64 = words.next().unwrap().parse().unwrap();
+    // days since 1970 by the civil calendar (Howard Hinnant's days_from_civil)
+    let (y, m) = if month <= 2 { (year - 1, month + 9) } else { (year, month - 3) };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let doy = (153 * m as i64 + 2) / 5 + day as i64 - 1;
+    let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468;
+    days * 86_400 + clock[0] * 3600 + clock[1] * 60 + clock[2]
+}
+
+#[test]
+fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
+    let mut s = session("0");
+    s.env.push(("RC_FOREGROUND_MS".into(), "50".into()));
+    s.json(&["ls"]);
+    let hello = s.connect().call(1, "hello", json!({}));
+    assert!(hello["result"]["features"].as_array().unwrap().iter().any(|f| f == "foreground_started"), "{hello}");
+    let t = run(&s, &["sh"]);
+    let shell = get(&s, &t)["pid"].as_i64().unwrap();
+    wait_until("the shell in front", || in_front(&s, &t) == shell);
+    s.json(&["send", &t, "sleep 30"]);
+    wait_until("sleep in front", || ![0, shell].contains(&in_front(&s, &t)));
+    let front = get(&s, &t)["foreground"].clone();
+    let sleep = front["pid"].as_i64().unwrap();
+    let started = front["started_ms"].as_i64().unwrap_or_else(|| panic!("no started_ms in {front}"));
+    assert_eq!(started.div_euclid(1000), lstart(sleep), "{front}");
+    let shell_started = {
+        unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
+        wait_until("the shell in front again", || in_front(&s, &t) == shell);
+        get(&s, &t)["foreground"]["started_ms"].as_i64().unwrap()
+    };
+    assert!(shell_started <= started, "the shell began at {shell_started}, sleep at {started}");
+}

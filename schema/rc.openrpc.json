@@ -293,6 +293,14 @@
             "description": "The foreground process group's leader.",
             "format": "int32",
             "type": "integer"
+          },
+          "started_ms": {
+            "description": "When it was created, unix ms, as the OS records it: what tells it from a later process given its pid.",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
