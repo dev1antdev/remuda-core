@@ -166,9 +166,9 @@ impl Core {
             tokio::time::sleep(Duration::from_millis(ms)).await;
             let live: Vec<u32> = self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect();
             for id in live {
-                let now = self.foreground_now(id).await;
+                let (now, program) = self.foreground_now(id).await;
                 let mut st = self.lock();
-                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live()) else {
+                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live() && t.pid == program) else {
                     continue;
                 };
                 let at_shell = crate::platform::foreground_tracks_jobs()
