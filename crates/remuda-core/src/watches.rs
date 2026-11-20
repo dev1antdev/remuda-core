@@ -99,7 +99,9 @@ fn excerpt(line: &str, at: std::ops::Range<usize>) -> (String, bool) {
     }
     let around = MAX_LINE.saturating_sub(at.len()) / 2;
     let start = line.floor_char_boundary(at.start.saturating_sub(around).min(line.len() - MAX_LINE));
-    let end = line.ceil_char_boundary(start + MAX_LINE);
+    // A start moved back to a character's first byte must not cut the match's end off.
+    let reach = if at.len() <= MAX_LINE { at.end } else { 0 };
+    let end = line.ceil_char_boundary((start + MAX_LINE).max(reach));
     (line[start..end].to_string(), true)
 }
 
@@ -447,6 +449,15 @@ mod tests {
             (&events[1]["data"]["line"], events[1]["data"].get("cut")),
             (&json!("short http://localhost:3000"), None)
         );
+    }
+
+    #[test]
+    fn a_match_that_fits_is_told_whole_whatever_characters_come_before() {
+        let line = format!("😀{}OK{}", "x".repeat(MAX_LINE - 4), "tail".repeat(30_000));
+        let at = Find::Pattern(regex::Regex::new("x+OK").unwrap()).find(&line).unwrap();
+        assert!(at.len() <= MAX_LINE);
+        let (told, cut) = excerpt(&line, at.clone());
+        assert!(cut && told.contains(&line[at]), "the whole match is in what is told");
     }
 
     #[test]
