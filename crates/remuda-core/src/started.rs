@@ -89,12 +89,7 @@ pub struct SinceBoot {
 /// the OS stored and no step moves it, and this tells nothing.
 #[cfg(target_os = "linux")]
 pub fn since_boot(pid: i32) -> Option<SinceBoot> {
-    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    let boot = BOOT.get_or_init(|| {
-        let id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
-        Some(id.trim().to_string()).filter(|id| !id.is_empty())
-    });
-    Some(SinceBoot { boot_id: boot.clone()?, ticks: start_ticks(pid)? })
+    Some(SinceBoot { boot_id: crate::platform::boot_id().ok().flatten()?, ticks: start_ticks(pid)? })
 }
 
 #[cfg(not(target_os = "linux"))]

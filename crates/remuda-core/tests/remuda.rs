@@ -457,7 +457,8 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     s.env.push(("RC_FOREGROUND_MS".into(), "50".into()));
     s.json(&["ls"]);
     let hello = s.connect().call(1, "hello", json!({}));
-    assert!(hello["result"]["features"].as_array().unwrap().iter().any(|f| f == "foreground_started"), "{hello}");
+    let features = hello["result"]["features"].as_array().unwrap();
+    assert!(["foreground_started", "foreground_since_boot"].iter().all(|f| features.iter().any(|g| g == f)), "{hello}");
     let t = run(&s, &["sh"]);
     let shell = get(&s, &t)["pid"].as_i64().unwrap();
     wait_until("the shell in front", || in_front(&s, &t) == shell);
@@ -471,37 +472,20 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     let second = started.div_euclid(1000);
     assert!(second == lstart(sleep) || cfg!(target_os = "linux") && second == lstart(sleep) + 1, "{front}");
     assert!(started >= sent - 20, "the creation to the kernel's tick: sent at {sent}, {front}");
+    // on Linux its start as the boot counts it, which no step of the clock moves; elsewhere started_ms is that already
+    let since = &front["started_since_boot"];
+    if cfg!(target_os = "linux") {
+        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").unwrap();
+        let stat = std::fs::read_to_string(format!("/proc/{sleep}/stat")).unwrap();
+        let ticks: u64 = stat[stat.rfind(')').unwrap() + 2..].split(' ').nth(19).unwrap().parse().unwrap();
+        assert_eq!((since["boot_id"].as_str(), since["ticks"].as_u64()), (Some(boot.trim()), Some(ticks)), "{front}");
+    } else {
+        assert!(since.is_null(), "{front}");
+    }
     let shell_started = {
         unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
         wait_until("the shell in front again", || in_front(&s, &t) == shell);
         get(&s, &t)["foreground"]["started_ms"].as_i64().unwrap()
     };
     assert!(shell_started <= started, "the shell began at {shell_started}, sleep at {started}");
-}
-
-#[test]
-fn the_foreground_tells_its_start_since_boot_on_linux() {
-    let mut s = session("0");
-    s.env.push(("RC_FOREGROUND_MS".into(), "50".into()));
-    s.json(&["ls"]);
-    let hello = s.connect().call(1, "hello", json!({}));
-    assert!(hello["result"]["features"].as_array().unwrap().iter().any(|f| f == "foreground_since_boot"), "{hello}");
-    let t = run(&s, &["sh"]);
-    let shell = get(&s, &t)["pid"].as_i64().unwrap();
-    wait_until("the shell in front", || in_front(&s, &t) == shell);
-    s.json(&["send", &t, "sleep 30"]);
-    wait_until("sleep in front", || ![0, shell].contains(&in_front(&s, &t)));
-    let front = get(&s, &t)["foreground"].clone();
-    let sleep = front["pid"].as_i64().unwrap();
-    let since = &front["started_since_boot"];
-    if cfg!(target_os = "linux") {
-        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").unwrap();
-        let stat = std::fs::read_to_string(format!("/proc/{sleep}/stat")).unwrap();
-        let ticks: u64 = stat[stat.rfind(')').unwrap() + 2..].split(' ').nth(19).unwrap().parse().unwrap();
-        assert_eq!(since["boot_id"], boot.trim(), "{front}");
-        assert_eq!(since["ticks"], ticks, "{front}");
-    } else {
-        assert!(since.is_null(), "macOS's started_ms is the creation it stored: {front}");
-    }
-    unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
 }
