@@ -301,6 +301,7 @@ fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
         json!({"line": "echo hi", "literal": true}),
         json!({"literal": true}),
         json!({"argv": ["printf", "x"], "literal": "true"}),
+        json!({"argv": ["printf", "x"], "literal": null}),
     ] {
         let reply = run_api(&s, params);
         assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");

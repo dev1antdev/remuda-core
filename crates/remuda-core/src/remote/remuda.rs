@@ -30,14 +30,15 @@ pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params
     (!line.features.iter().any(|f| f == feature)).then(|| older(name, added, cannot))
 }
 
-/// `terminal.run`'s own refusals of `literal` (`api/run.rs`): not a boolean, or true with `line` or without argv.
+/// `terminal.run`'s own refusals of `literal` (`api/run.rs`): given but not a boolean (null too), or true with `line` or
+/// without argv.
 fn literal_invalid(params: &Value) -> Option<RpcError> {
-    let literal = &params["literal"];
-    if !matches!(literal, Value::Null | Value::Bool(_)) {
+    let literal = params.get("literal");
+    if literal.is_some_and(|l| !l.is_boolean()) {
         return Some(RpcError::invalid_params("literal is true or false"));
     }
     let without_argv = params["argv"].as_array().is_none_or(Vec::is_empty);
-    (*literal == true && (!params["line"].is_null() || without_argv))
+    (literal == Some(&Value::Bool(true)) && (!params["line"].is_null() || without_argv))
         .then(|| RpcError::invalid_params("literal starts argv as it is: give argv, not line"))
 }
 
@@ -94,6 +95,7 @@ mod tests {
         for run in [
             json!({"argv": ["npm", "run", "dev"], "literal": "true"}),
             json!({"argv": ["npm"], "literal": 1}),
+            json!({"argv": ["npm", "run", "dev"], "literal": null}),
             json!({"line": "npm run dev", "literal": true}),
             json!({"literal": true}),
             json!({"argv": [], "literal": true}),
