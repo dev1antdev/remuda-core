@@ -1139,7 +1139,7 @@
         "type": "object"
       },
       "SinceBoot": {
-        "description": "A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's\n`/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link, \"\" on a\nkernel without them), whose boot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the\nboot (`/proc/<pid>/stat`'s starttime).",
+        "description": "A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's\n`/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link), whose\nboot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the boot (`/proc/<pid>/stat`'s\nstarttime).",
         "properties": {
           "boot_id": {
             "type": "string"
