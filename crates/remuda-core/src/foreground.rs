@@ -20,6 +20,9 @@ pub struct Foreground {
     /// When it was created, unix ms, as the OS records it: what tells it from a later process given its pid.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_ms: Option<u64>,
+    /// On Linux, its start as the boot counts it, which no step of the wall clock moves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_since_boot: Option<crate::started::SinceBoot>,
 }
 
 /// The facts about `pid`, if it is still there to read.
@@ -30,7 +33,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     let argv =
         cmdline.split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
     let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?.display().to_string();
-    Some(Foreground { pid, name, argv, cwd, started_ms: None })
+    Some(Foreground { pid, name, argv, cwd, ..Default::default() })
 }
 
 /// A pseudo console has no foreground group: this is the program the
@@ -92,7 +95,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
         .into_iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
-    Some(Foreground { pid, name, argv, cwd, started_ms: None })
+    Some(Foreground { pid, name, argv, cwd, ..Default::default() })
 }
 
 #[cfg(target_os = "macos")]
@@ -107,7 +110,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     }
     let path = unsafe { std::ffi::CStr::from_ptr(vnode.pvi_cdir.vip_path.as_ptr().cast()) };
     let (argv, _) = procargs(pid)?;
-    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), started_ms: None })
+    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), ..Default::default() })
 }
 
 /// KERN_PROCARGS2: argc, the executable path, the arguments, then the
@@ -205,8 +208,13 @@ mod tests {
     #[test]
     fn command_flags_keep_shell_roots_from_clearing_live_status() {
         for shell in ["sh", "bash", "zsh", "fish", "nu", "dash", "ksh", "tcsh"] {
-            let mut root =
-                Foreground { pid: 1, name: shell.into(), argv: vec![shell.into()], cwd: "/".into(), started_ms: None };
+            let mut root = Foreground {
+                pid: 1,
+                name: shell.into(),
+                argv: vec![shell.into()],
+                cwd: "/".into(),
+                ..Default::default()
+            };
             assert!(shell_root(&root), "{shell}");
             for arg in ["-i", "-li", "--login", "--no-config"] {
                 root.argv = vec![shell.into(), arg.into()];

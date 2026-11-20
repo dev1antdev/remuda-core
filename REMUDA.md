@@ -42,7 +42,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
   `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`, `terminal.run`'s
   `literal`, every status word in `terminal.send`'s `if`, the record's `literal`, the foreground's
-  `started_ms`).
+  `started_ms` and `started_since_boot`).
 
 ## Keeping upstream's fixes applying
 
@@ -187,8 +187,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   remuda tells the process the core saw from a later one given its pid before it reads that
   process's session. Ours: `remuda-core/src/started.rs` (`of`, `boot_ms`, `bracketed`, `settle`,
   `in_session`, `Program` and `Core::foreground_now`, with their tests); in upstream's files the field and
-  `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal,
-  `watch_foreground` calling `foreground_now` where it asked the holder and read `about`, and
+  its literals in `foreground.rs`, which hold `..Default::default()` since `started_since_boot`
+  (below), `watch_foreground` calling `foreground_now` where it asked the holder and read `about`, and
   keeping its look only while the terminal's program is the one it was read under (`Program`: its
   pid and which of the core's spawns started it, counted in memory and never back, so a `lost` or
   a restart meanwhile, the same pid's too whatever the clock says, leaves it for the next look),
@@ -197,6 +197,25 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `pub mod started;` in `lib.rs`, the feature in `api.rs`, the `foreground` row and a section of
   its own, "Fields newer cores add", in `schema/README.md`, the generated schema; the end-to-end
   test is ours, in `tests/remuda.rs`.
+- A terminal's `foreground` carries `started_since_boot` on Linux (`foreground_since_boot` in
+  hello's features): that process's start as its boot counts it, `{boot_id, time_ns, ticks}`
+  (`/proc/sys/kernel/random/boot_id` through `platform::boot_id`, which the restart reads too, the
+  core's own time namespace from `/proc/self/ns/time`, whose boot-time offset Linux adds to the
+  ticks a reader sees — none told when that link cannot be read — and `/proc/<pid>/stat`'s
+  starttime), which no step
+  of the wall clock moves, so a process born as much later as the clock went back is not taken for
+  the one before, as `started_ms` alone would take it; read with `started_ms`, the look kept only
+  while both are the same before and after it; absent on macOS and Windows, whose `started_ms` is
+  the creation the OS stored, which no later step moves, though a step back between two births
+  still gives both one `started_ms` there (a known limit, said in `schema/README.md`). Ours:
+  `SinceBoot`, `since_boot` and `start_ticks` (which `of` now reads through) in
+  `remuda-core/src/started.rs` with their test, `foreground_now` there reading it, and
+  `impl Default for Foreground` there; in upstream's files the field, and `..Default::default()`
+  in place of `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal, so
+  a later field of ours touches none of them (rustfmt lays the test's `root` literal out a field a
+  line, 123 columns being past the width, so that whole literal is ours), the feature in `api.rs`,
+  the `foreground` row and a paragraph in `schema/README.md`'s "Fields newer cores add", the
+  generated schema; the end-to-end test is ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

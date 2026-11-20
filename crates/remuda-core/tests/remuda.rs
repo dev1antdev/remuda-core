@@ -457,7 +457,8 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     s.env.push(("RC_FOREGROUND_MS".into(), "50".into()));
     s.json(&["ls"]);
     let hello = s.connect().call(1, "hello", json!({}));
-    assert!(hello["result"]["features"].as_array().unwrap().iter().any(|f| f == "foreground_started"), "{hello}");
+    let features = hello["result"]["features"].as_array().unwrap();
+    assert!(["foreground_started", "foreground_since_boot"].iter().all(|f| features.iter().any(|g| g == f)), "{hello}");
     let t = run(&s, &["sh"]);
     let shell = get(&s, &t)["pid"].as_i64().unwrap();
     wait_until("the shell in front", || in_front(&s, &t) == shell);
@@ -471,6 +472,32 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     let second = started.div_euclid(1000);
     assert!(second == lstart(sleep) || cfg!(target_os = "linux") && second == lstart(sleep) + 1, "{front}");
     assert!(started >= sent - 20, "the creation to the kernel's tick: sent at {sent}, {front}");
+    // on Linux its start as the boot counts it, which no step of the clock moves; elsewhere started_ms is that already
+    let since = &front["started_since_boot"];
+    if cfg!(target_os = "linux") {
+        let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").unwrap();
+        let stat = std::fs::read_to_string(format!("/proc/{sleep}/stat")).unwrap();
+        let ticks: u64 = stat[stat.rfind(')').unwrap() + 2..].split(' ').nth(19).unwrap().parse().unwrap();
+        let ns = std::fs::read_link("/proc/self/ns/time").unwrap().display().to_string();
+        let told = (since["boot_id"].as_str(), since["time_ns"].as_str(), since["ticks"].as_u64());
+        assert_eq!(told, (Some(boot.trim()), Some(ns.as_str()), Some(ticks)), "{front}");
+        // a reader in another time namespace sees the ticks shifted by its boot-time offset, and another namespace
+        let elsewhere = std::process::Command::new("unshare")
+            .args(["--user", "--map-root-user", "--time", "--boottime", "60", "--fork", "sh", "-c"])
+            .arg(format!("readlink /proc/self/ns/time; cut -d' ' -f22 /proc/{sleep}/stat"))
+            .output();
+        match elsewhere {
+            Ok(out) if out.status.success() => {
+                let out = String::from_utf8_lossy(&out.stdout);
+                let (their_ns, their_ticks) = out.trim().split_once('\n').unwrap();
+                assert_ne!(their_ns, ns, "{out}");
+                assert_ne!(their_ticks.parse::<u64>().unwrap(), ticks, "{out}");
+            }
+            _ => eprintln!("no time namespace of our own to read from here: the shifted ticks go unchecked"),
+        }
+    } else {
+        assert!(since.is_null(), "{front}");
+    }
     let shell_started = {
         unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
         wait_until("the shell in front again", || in_front(&s, &t) == shell);

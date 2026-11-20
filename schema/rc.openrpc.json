@@ -302,6 +302,17 @@
               "integer",
               "null"
             ]
+          },
+          "started_since_boot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SinceBoot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "On Linux, its start as the boot counts it, which no step of the wall clock moves."
           }
         },
         "required": [
@@ -1124,6 +1135,28 @@
         },
         "required": [
           "turn"
+        ],
+        "type": "object"
+      },
+      "SinceBoot": {
+        "description": "A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's\n`/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link), whose\nboot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the boot (`/proc/<pid>/stat`'s\nstarttime).",
+        "properties": {
+          "boot_id": {
+            "type": "string"
+          },
+          "ticks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "time_ns": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "boot_id",
+          "time_ns",
+          "ticks"
         ],
         "type": "object"
       },
