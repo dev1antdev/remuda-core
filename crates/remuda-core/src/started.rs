@@ -51,6 +51,11 @@ impl Program {
 static SPAWNS: std::sync::Mutex<std::collections::BTreeMap<u32, u64>> =
     std::sync::Mutex::new(std::collections::BTreeMap::new());
 
+/// Forgets terminal `id`'s spawn as the core removes it: an id is never given out again.
+pub(crate) fn forget(id: u32) {
+    SPAWNS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&id);
+}
+
 /// Notes that the core started a program for terminal `id`.
 pub(crate) fn spawned(id: u32) {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -206,6 +211,12 @@ mod tests {
         assert_ne!(super::Program::at(id, None), before, "lost");
         super::spawned(id);
         assert_ne!(super::Program::at(id, Some(7)), before, "the same pid started again, whatever the clock says");
+        super::forget(id);
+        assert_eq!(
+            super::Program::at(id, Some(7)),
+            super::Program { pid: Some(7), spawn: None },
+            "a removed one is kept no more"
+        );
     }
 
     #[cfg(unix)]

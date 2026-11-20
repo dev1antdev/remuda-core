@@ -192,7 +192,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   keeping its look only while the terminal's program is the one it was read under (`Program`: its
   pid and which of the core's spawns started it, counted in memory and never back, so a `lost` or
   a restart meanwhile, the same pid's too whatever the clock says, leaves it for the next look),
-  `spawn_result` in `runtime.rs` noting each spawn (`crate::started::spawned`),
+  `spawn_result` in `runtime.rs` noting each spawn (`crate::started::spawned`) and `Core::remove`
+  forgetting it (`crate::started::forget`),
   `pub mod started;` in `lib.rs`, the feature in `api.rs`, the `foreground` row and a section of
   its own, "Fields newer cores add", in `schema/README.md`, the generated schema; the end-to-end
   test is ours, in `tests/remuda.rs`.
