@@ -1,7 +1,6 @@
 //! Input from agents: one queue per terminal, so send, keys and interrupt
 //! never interleave with each other, and never with a person typing.
 
-use crate::holder_proto as proto;
 use crate::rpc::RpcError;
 use crate::runtime::{Core, State};
 use crate::terminals::Terminal;
@@ -596,14 +595,7 @@ impl Core {
 
     /// The process group in the foreground of terminal `id`, or -1.
     pub(crate) async fn foreground(&self, id: u32) -> i32 {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        {
-            let mut st = self.lock();
-            let Some(link) = st.link(id) else { return -1 };
-            link.send(&proto::frame(proto::FOREGROUND, id, &[]));
-            let holder = link.instance.clone();
-            st.foreground.entry(id).or_default().push((holder, tx));
-        }
+        let Some(rx) = crate::front::ask(&mut self.lock(), id, false) else { return -1 };
         tokio::time::timeout(Duration::from_secs(1), rx).await.ok().and_then(Result::ok).unwrap_or(-1)
     }
 }

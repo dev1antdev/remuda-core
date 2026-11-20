@@ -1,9 +1,10 @@
 //! remuda's own (REMUDA.md): a send that types only while the program it is for leads the terminal, so an
 //! agent that left while the send waited for a person's draft never has its message run by the shell behind it.
 
+use crate::holder_proto as proto;
 use crate::input::{Sent, Step};
 use crate::rpc::RpcError;
-use crate::runtime::Core;
+use crate::runtime::{Core, State};
 use crate::terminals::Terminal;
 use std::collections::{HashMap, HashSet};
 use tokio::sync::oneshot;
@@ -29,6 +30,20 @@ pub(crate) fn link_ended(asked: &mut Asked, holder: &str) {
         waiting.retain(|(asked_of, _)| asked_of != holder);
         !waiting.is_empty()
     });
+}
+
+/// Asks terminal `id`'s holder what leads it, the lookup noted to take that holder's answer to this very request,
+/// under the caller's lock. None without a link, or, `trusted`, when the holder may answer on a link that did not ask.
+pub(crate) fn ask(st: &mut State, id: u32, trusted: bool) -> Option<oneshot::Receiver<i32>> {
+    let link = st.link(id)?;
+    if trusted && !st.own_replies.contains(&link.instance) {
+        return None;
+    }
+    link.send(&proto::frame(proto::FOREGROUND, id, &[]));
+    let holder = link.instance.clone();
+    let (tx, rx) = oneshot::channel();
+    st.foreground.entry(id).or_default().push((holder, tx));
+    Some(rx)
 }
 
 /// Notes a holder just linked that answers a lookup only on the link that asked it.
@@ -106,10 +121,16 @@ impl Core {
         self.send_message(id, text, force, only_if, front, false).await
     }
 
-    /// Ok while process group `pid` leads terminal `id`'s foreground (a foreground that cannot be read counts as
-    /// another), and before the paste while the caller still waits for it.
+    /// Ok while process group `pid` leads terminal `id`'s foreground, as its holder answers this very lookup (a
+    /// foreground that cannot be read, or a holder that may answer another lookup's, counts as another), and before
+    /// the paste while the caller still waits for it.
     pub(crate) async fn in_front(&self, id: u32, pid: i32, pasted: bool) -> Result<(), RpcError> {
-        let now = self.foreground(id).await;
+        let asked = ask(&mut self.lock(), id, true);
+        let answer = match asked {
+            Some(rx) => tokio::time::timeout(std::time::Duration::from_secs(1), rx).await.ok().and_then(Result::ok),
+            None => None,
+        };
+        let now = answer.unwrap_or(-1);
         if now <= 0 || now != pid {
             return Err(moved(id, pid, now, pasted));
         }
