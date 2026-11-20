@@ -175,10 +175,12 @@ the terminal (the `pid` of its `foreground`, the core's own pick on Windows, whe
 a pseudo console has no foreground group: check its `name` is the program you
 mean). Refused as `status_mismatch` when the core's last look already saw another,
 then looked at afresh before the paste (`status_mismatch`: nothing typed) and again
-before Enter (`not_submitted`: the text was pasted and left there unsubmitted, so
-read the terminal before sending again). It narrows, it cannot close: a program that
-stops reading while still in front leaves what was typed to whatever reads the
-terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
+before Enter (`not_submitted`: the text may have reached the terminal and the send
+held back its own Enter, though a key a person pressed meanwhile still goes, so read
+the terminal before sending again). Each look is the holder's answer to that very
+request, never an earlier sample. It narrows, it cannot close: between a look and the
+write, and for a program that stops reading while still in front, what was typed
+goes to whatever reads the terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
 refuses the field towards a core that does not (`needs_update`). Clients send it
 only to a core that lists it: an older core ignores it and types whatever is in
 front. The CLI has no flag for it.

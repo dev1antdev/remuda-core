@@ -507,7 +507,7 @@ pub struct SendParams {
     #[serde(rename = "if")]
     pub only_if: Option<IdleOrWorking>,
     /// Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste
-    /// and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted`. API only:
+    /// and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back). API only:
     /// a client that read `terminal.get` names it, after checking `send_foreground` in hello.
     #[arg(skip)]
     #[serde(skip_serializing_if = "Option::is_none")]

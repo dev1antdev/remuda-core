@@ -5,6 +5,31 @@ use crate::input::{Sent, Step};
 use crate::rpc::RpcError;
 use crate::runtime::Core;
 use crate::terminals::Terminal;
+use std::collections::HashMap;
+use tokio::sync::oneshot;
+
+/// The lookups waiting on each terminal's foreground, each with the holder asked. A holder answers in the order it
+/// was asked, so each reply goes to its own lookup: never one sampled before a later lookup was asked.
+pub type Asked = HashMap<u32, Vec<(String, oneshot::Sender<i32>)>>;
+
+/// The lookup a reply from `holder` answers: the oldest it was asked (one given up on still takes its place).
+pub(crate) fn answering(asked: &mut Asked, id: u32, holder: &str) -> Option<oneshot::Sender<i32>> {
+    let waiting = asked.get_mut(&id)?;
+    let at = waiting.iter().position(|(asked_of, _)| asked_of == holder)?;
+    let (_, tx) = waiting.remove(at);
+    if waiting.is_empty() {
+        asked.remove(&id);
+    }
+    Some(tx)
+}
+
+/// A holder's link ended: the replies its lookups wait for went with it, and a link taken back starts afresh.
+pub(crate) fn link_ended(asked: &mut Asked, holder: &str) {
+    asked.retain(|_, waiting| {
+        waiting.retain(|(asked_of, _)| asked_of != holder);
+        !waiting.is_empty()
+    });
+}
 
 /// Puts a look at the terminal's foreground before the paste and again before its submit, the last step.
 pub(crate) fn guard(steps: &mut Vec<Step>, pid: i32) {
@@ -31,7 +56,11 @@ fn moved(id: u32, pid: i32, now: i32, pasted: bool) -> RpcError {
         format!("{address}'s foreground could not be read, so {pid} may have left")
     };
     if pasted {
-        RpcError::new("not_submitted", message, "the text was pasted but not submitted: read the terminal")
+        RpcError::new(
+            "not_submitted",
+            message,
+            "the text may have reached the terminal; rc held back its Enter, not a key a person pressed meanwhile: read the terminal before sending again",
+        )
     } else {
         RpcError::new("status_mismatch", message, "nothing was typed")
     }
@@ -64,6 +93,25 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_reply_answers_the_lookup_it_was_asked_for() {
+        let mut asked = Asked::new();
+        let mut lookup = |holder: &str| {
+            let (tx, rx) = oneshot::channel();
+            asked.entry(7).or_default().push((holder.to_string(), tx));
+            rx
+        };
+        let (mut gone, mut watcher, mut send) = (lookup("old"), lookup("h1"), lookup("h1"));
+        answering(&mut asked, 7, "h1").unwrap().send(11).unwrap();
+        assert_eq!(watcher.try_recv(), Ok(11));
+        assert!(send.try_recv().is_err(), "an earlier lookup's reply answered a later one");
+        link_ended(&mut asked, "old");
+        assert!(gone.try_recv().is_err() && !asked[&7].iter().any(|(holder, _)| holder == "old"));
+        answering(&mut asked, 7, "h1").unwrap().send(12).unwrap();
+        assert_eq!(send.try_recv(), Ok(12));
+        assert!(asked.is_empty());
+    }
 
     #[test]
     fn the_paste_and_its_submit_each_wait_on_a_look() {
