@@ -187,6 +187,15 @@ refuses the field towards a core that does not (`needs_update`). Clients send it
 only to a core that lists it: an older core ignores it and types whatever is in
 front. The CLI has no flag for it.
 
+`literal: true` on `terminal.run` starts `argv` as it is: no template is looked up
+by its first word and no first message is sent, so a program named like a template
+runs itself, and a missing one is `spawn_failed`. It needs `argv`: with `line`, or
+with neither, it is `invalid_params`. Cores advertise `run_literal` in
+`hello.features`; a relay refuses the field towards a core that does not
+(`needs_update`). Clients send it only to a core that lists it: an older core
+ignores it and may start a template in the program's place. The CLI has no flag
+for it.
+
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,
 `children_of`, labels). When a machine's line comes back, its terminals that

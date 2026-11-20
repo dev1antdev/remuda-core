@@ -229,6 +229,12 @@ pub struct RunParams {
     #[arg(skip)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line: Option<String>,
+    /// Start argv as it is: no template is looked up by its first word and no first message is sent, so a
+    /// missing program is `spawn_failed`. Needs argv, not line. API only: a client names it after checking
+    /// `run_literal` in hello.
+    #[arg(skip)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub literal: bool,
     /// Initial size before the program starts. Omitted: the configured
     /// headless size (default 200 columns by 120 rows). Later viewers resize normally.
     #[arg(skip)]

@@ -3,10 +3,13 @@
 use super::*;
 
 pub(super) async fn terminal_run(core: Ctx<'_>, mut p: RunParams) -> Result<RunResult, RpcError> {
+    if p.literal && (p.line.is_some() || p.argv.is_empty()) {
+        return Err(RpcError::invalid_params("literal starts argv as it is: give argv, not line"));
+    }
     // A template is found only by template lookup, never by terminal name.
     let template = match p.argv.first() {
-        Some(name) => crate::templates::load(&core.paths, name)?,
-        None => None,
+        Some(name) if !p.literal => crate::templates::load(&core.paths, name)?,
+        _ => None,
     };
     let first = template.as_ref().map(|t| crate::templates::first_message(t, &p.argv[1..].join(" ")));
     match (&template, p.line.take(), p.argv.is_empty()) {

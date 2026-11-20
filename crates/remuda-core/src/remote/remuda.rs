@@ -1,4 +1,4 @@
-//! remuda's own changes (REMUDA.md) to viewers relayed to other cores.
+//! remuda's own changes (REMUDA.md) to calls and viewers relayed to other cores.
 
 use super::*;
 
@@ -9,18 +9,18 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
         .then(|| older(&m.name, true, "can't keep the size for a viewer that types"))
 }
 
-/// A send that names the process it is for, towards a core that would type it whoever is in front. `added`: a
-/// machine this core added, which `rc machine update` reaches; else a core that added us.
-pub(super) fn send_foreground_refused(
-    line: &Line,
-    name: &str,
-    added: bool,
-    method: &str,
-    params: &Value,
-) -> Option<RpcError> {
-    let asked = method == "terminal.send" && !params["foreground"].is_null();
-    (asked && !line.features.iter().any(|f| f == "send_foreground"))
-        .then(|| older(name, added, "can't check what is in front before it types"))
+/// A call carrying what an older core would ignore, to its harm, towards a core without the feature: a send that
+/// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
+/// like the program). `added`: a machine this core added, which `rc machine update` reaches; else a core that added us.
+pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
+    let (feature, cannot) = match method {
+        "terminal.send" if !params["foreground"].is_null() => {
+            ("send_foreground", "can't check what is in front before it types")
+        }
+        "terminal.run" if params["literal"] == true => ("run_literal", "would start a template named like the program"),
+        _ => return None,
+    };
+    (!line.features.iter().any(|f| f == feature)).then(|| older(name, added, cannot))
 }
 
 fn older(name: &str, added: bool, cannot: &str) -> RpcError {
@@ -44,13 +44,26 @@ mod tests {
         let old = Line::new(frames.clone(), &json!({"features": ["keep_size"]}));
         let current = Line::new(frames, &json!({"features": ["send_foreground"]}));
         let send = json!({"terminal": "t1", "text": "hi", "foreground": 42});
-        let refused = send_foreground_refused(&old, "away", true, "terminal.send", &send).unwrap();
-        assert_eq!((refused.kind.as_str(), refused.hint.as_str()), ("needs_update", "rc machine update away"));
-        let from_a_peer = send_foreground_refused(&old, "lead", false, "terminal.send", &send).unwrap();
+        let refusal = refused(&old, "away", true, "terminal.send", &send).unwrap();
+        assert_eq!((refusal.kind.as_str(), refusal.hint.as_str()), ("needs_update", "rc machine update away"));
+        let from_a_peer = refused(&old, "lead", false, "terminal.send", &send).unwrap();
         assert_eq!(from_a_peer.hint, "update rc on lead");
-        assert!(send_foreground_refused(&current, "away", true, "terminal.send", &send).is_none());
+        assert!(refused(&current, "away", true, "terminal.send", &send).is_none());
         let plain = json!({"terminal": "t1", "text": "hi"});
-        assert!(send_foreground_refused(&old, "away", true, "terminal.send", &plain).is_none());
+        assert!(refused(&old, "away", true, "terminal.send", &plain).is_none());
+    }
+
+    #[test]
+    fn a_literal_run_goes_only_to_cores_that_skip_templates() {
+        let (frames, _rx) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": ["send_foreground"]}));
+        let current = Line::new(frames, &json!({"features": ["run_literal"]}));
+        let run = json!({"argv": ["npm", "run", "dev"], "literal": true});
+        let refusal = refused(&old, "away", true, "terminal.run", &run).unwrap();
+        assert_eq!((refusal.kind.as_str(), refusal.hint.as_str()), ("needs_update", "rc machine update away"));
+        assert!(refused(&current, "away", true, "terminal.run", &run).is_none());
+        let plain = json!({"argv": ["npm", "run", "dev"]});
+        assert!(refused(&old, "away", true, "terminal.run", &plain).is_none());
     }
 
     #[derive(Clone, Copy, PartialEq)]
