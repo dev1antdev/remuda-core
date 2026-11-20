@@ -178,11 +178,14 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   that process was created, unix ms, a floor, as the OS records it (Linux `/proc/<pid>/stat`'s
   start with `/proc/stat`'s boot time, as ps reckons `lstart`, so a step of the wall clock moves
   it with ps's and the core tells each foreground again once; macOS `proc_pidinfo`'s BSD info;
-  Windows `GetProcessTimes`), read before and after the rest of the foreground, a look where the
-  two differ telling none; so remuda tells the process the core saw from a later one given its
-  pid before it reads that process's session. Ours: `remuda-core/src/started.rs` (`of`, `about`,
-  with their test); in upstream's files the field and `started_ms: None` in the three `about`s of
-  `foreground.rs` and its test's literal, `watch_foreground` calling `crate::started::about`,
+  Windows `GetProcessTimes`), read before and after the rest of the foreground, and on Unix only
+  for a process in the session of the terminal's own program, a look where the start moved or
+  that found another terminal's process telling none; so remuda tells the process the core saw
+  from a later one given its pid before it reads that process's session. Ours:
+  `remuda-core/src/started.rs` (`of`, `about`, `in_session`, with their tests); in upstream's files
+  the field and `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal,
+  `watch_foreground` listing each live terminal with its program's pid and calling
+  `crate::started::about`,
   `pub mod started;` in `lib.rs`, the feature in `api.rs`, the `foreground` row and a section of
   its own, "Fields newer cores add", in `schema/README.md`, the generated schema; the end-to-end
   test is ours, in `tests/remuda.rs`.

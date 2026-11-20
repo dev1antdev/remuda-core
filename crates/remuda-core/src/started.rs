@@ -5,13 +5,30 @@
 
 use crate::foreground::Foreground;
 
-/// The facts about `pid` in front with its creation, read before and after them: a pid that changed hands meanwhile
-/// tells nothing this look, rather than one process's name with another's start.
-pub fn about(pid: i32) -> Option<Foreground> {
+/// The facts about `pid` in front of the terminal whose program is `root`, with its creation, read before and after
+/// them: a pid that changed hands meanwhile — to a later process, or on Unix to a process of another terminal's
+/// session — tells nothing this look, rather than another process's facts as this terminal's.
+pub fn about(pid: i32, root: Option<u32>) -> Option<Foreground> {
     let before = of(pid);
     let facts = crate::foreground::about(pid)?;
+    let ours = in_session(pid, root);
     let after = of(pid);
-    (before == after).then_some(Foreground { started_ms: after, ..facts })
+    (ours && before == after).then_some(Foreground { started_ms: after, ..facts })
+}
+
+/// Whether `pid` is in the session of the terminal whose program is `root`: on Unix a terminal is its program's
+/// session's, which every process in front of it is in. Unchecked where there is nothing to ask: on Windows, where the
+/// core picks the program from the terminal's own, and while the terminal waits for a program.
+#[cfg(unix)]
+fn in_session(pid: i32, root: Option<u32>) -> bool {
+    let Some(root) = root else { return true };
+    let session = unsafe { libc::getsid(pid) };
+    session > 0 && session == unsafe { libc::getsid(root as i32) }
+}
+
+#[cfg(windows)]
+fn in_session(_: i32, _: Option<u32>) -> bool {
+    true
 }
 
 /// The process's creation in unix ms, if it is still there to read.
@@ -74,6 +91,23 @@ mod tests {
         assert!(started <= now && started > now - 3_600_000, "started {started}, now {now}");
         assert_eq!(super::of(pid), Some(started));
         assert_eq!(super::of(i32::MAX), None);
-        assert_eq!(super::about(pid).and_then(|f| f.started_ms), Some(started));
+        assert_eq!(super::about(pid, Some(pid as u32)).and_then(|f| f.started_ms), Some(started));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_of_another_terminals_session_is_not_in_front_of_this_one() {
+        use std::os::unix::process::CommandExt;
+        let mut other = std::process::Command::new("sleep");
+        other.arg("30");
+        unsafe { other.pre_exec(|| if libc::setsid() < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }) };
+        let mut other = other.spawn().unwrap();
+        let elsewhere = other.id();
+        let pid = std::process::id() as i32;
+        assert!(super::about(pid, Some(elsewhere)).is_none(), "a pid read as in front of another session's terminal");
+        assert!(super::about(elsewhere as i32, Some(elsewhere)).is_some());
+        assert!(super::about(pid, None).is_some(), "a terminal waiting for a program checks nothing");
+        let _ = other.kill();
+        let _ = other.wait();
     }
 }

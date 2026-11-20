@@ -171,9 +171,17 @@ core tells each terminal's foreground again once), on Windows the creation
 FILETIME. It tells the process in front from a later one given the same pid, so a
 client that reads a process itself (its session files, say) can check that it
 read the one the core saw: a start that differs is another process, or one it
-cannot tell, never the same. The start is read before and after the rest of the
-foreground, and a look where they differ (the pid changed hands meanwhile) tells
-no foreground. Cores advertise `foreground_started` in `hello.features`; a
+cannot tell, never the same. A second alone does not tell two processes that
+took one pid within it apart, so a client also checks a finer time the process
+records itself when it has one (Claude Code's `startedAt`, in ms, is never
+before `started_ms`); on Linux a program's own record of its start does not
+follow a step of the clock as `started_ms` and `ps` do, so after a step such a
+check cannot tell, which reads as no match. The start is read before and after
+the rest of the foreground, and on Unix that process must be in the session of
+the terminal's own program (every process in front of a terminal is): a look
+where the start moved, or that found a process of another terminal under the pid,
+tells no foreground. On Windows, where the core picks the program from the
+terminal's own processes, the pick and the read are a moment apart. Cores advertise `foreground_started` in `hello.features`; a
 terminal relayed from an added machine carries its own core's foreground, so a
 missing `started_ms` means unknown for that terminal (an older core there, or an
 OS that would not tell), whatever the first core's hello said.
