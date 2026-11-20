@@ -10,14 +10,17 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
 }
 
 /// A call carrying what an older core would ignore, to its harm, towards a core without the feature: a send that
-/// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
-/// like the program). `added`: a machine this core added, which `rc machine update` reaches; else a core that added us.
+/// names the process it is for (it would type whoever is in front), a run with any `literal` but false (it would
+/// start a template named like the program; a newer core checks the value itself). `added`: a machine this core
+/// added, which `rc machine update` reaches; else a core that added us (which is never asked to run: `route`).
 pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
     let (feature, cannot) = match method {
         "terminal.send" if !params["foreground"].is_null() => {
             ("send_foreground", "can't check what is in front before it types")
         }
-        "terminal.run" if params["literal"] == true => ("run_literal", "would start a template named like the program"),
+        "terminal.run" if !matches!(params["literal"], Value::Null | Value::Bool(false)) => {
+            ("run_literal", "would start a template named like the program")
+        }
         _ => return None,
     };
     (!line.features.iter().any(|f| f == feature)).then(|| older(name, added, cannot))
@@ -64,6 +67,38 @@ mod tests {
         assert!(refused(&current, "away", true, "terminal.run", &run).is_none());
         let plain = json!({"argv": ["npm", "run", "dev"]});
         assert!(refused(&old, "away", true, "terminal.run", &plain).is_none());
+        let unread = json!({"argv": ["npm", "run", "dev"], "literal": "true"});
+        assert!(
+            refused(&old, "away", true, "terminal.run", &unread).is_some(),
+            "an older core would start npm's template"
+        );
+        assert!(refused(&current, "away", true, "terminal.run", &unread).is_none(), "a newer core refuses it itself");
+        let not_literal = json!({"argv": ["npm", "run", "dev"], "literal": false});
+        assert!(refused(&old, "away", true, "terminal.run", &not_literal).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_literal_run_is_never_sent_to_a_core_that_added_us() {
+        let (core, root) = test_core("rc-literal-peer");
+        core.lock().peers.insert("lead-id".into(), Peer { name: "lead".into(), ..Default::default() });
+        let run = json!({"argv": ["npm", "run", "dev"], "literal": true, "on": "lead"});
+        let refusal = route(&core, "terminal.run", &run).err().expect("a peer is not run on");
+        assert_eq!(refusal.kind, "machine_unknown");
+        drop(core);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn test_core(what: &str) -> (Arc<Core>, std::path::PathBuf) {
+        let root = crate::test_tmp().join(format!("{what}-{}-{}", std::process::id(), crate::platform::random_hex()));
+        let paths = Paths {
+            socket: root.join("core.sock"),
+            holder_socket: root.join("holder.sock"),
+            state: root.clone(),
+            config: root.join("config.toml"),
+        };
+        paths.create_dirs().unwrap();
+        let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+        (core, root)
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -76,19 +111,7 @@ mod tests {
     #[tokio::test]
     async fn a_viewer_that_keeps_the_size_goes_only_to_cores_that_can() {
         for path in [Path::Supported, Path::OldHere, Path::OldFurther] {
-            let root = crate::test_tmp().join(format!(
-                "rc-keep-size-{}-{}",
-                std::process::id(),
-                crate::platform::random_hex()
-            ));
-            let paths = Paths {
-                socket: root.join("core.sock"),
-                holder_socket: root.join("holder.sock"),
-                state: root.clone(),
-                config: root.join("config.toml"),
-            };
-            paths.create_dirs().unwrap();
-            let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+            let (core, root) = test_core("rc-keep-size");
             let machine = Machine {
                 name: "away".into(),
                 target: "away".into(),
