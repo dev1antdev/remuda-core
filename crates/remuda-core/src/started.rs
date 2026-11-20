@@ -5,6 +5,8 @@
 
 use crate::foreground::Foreground;
 use crate::runtime::Core;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 impl Core {
     /// What is in front of terminal `id`, with the terminal's program it was read under (its pid and which of the
@@ -20,12 +22,12 @@ impl Core {
         if pgid <= 0 {
             return (None, program);
         }
-        let before = of(pgid);
+        let before = (of(pgid), since_boot(pgid));
         let Some(facts) = crate::foreground::about(pgid) else { return (None, program) };
         let ours = in_session(pgid, program.pid);
-        let after = of(pgid);
+        let after = (of(pgid), since_boot(pgid));
         let same = before == after && ours && self.foreground(id).await == pgid;
-        (same.then_some(Foreground { started_ms: after, ..facts }), program)
+        (same.then_some(Foreground { started_ms: after.0, started_since_boot: after.1, ..facts }), program)
     }
 }
 
@@ -75,12 +77,43 @@ fn in_session(_: i32, _: Option<u32>) -> bool {
     true
 }
 
+/// A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's
+/// `/proc/sys/kernel/random/boot_id`) and the clock ticks since it (`/proc/<pid>/stat`'s starttime).
+#[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
+pub struct SinceBoot {
+    pub boot_id: String,
+    pub ticks: u64,
+}
+
+/// The process's start since boot, on Linux, if it is still there to read; elsewhere `started_ms` is the creation
+/// the OS stored and no step moves it, and this tells nothing.
+#[cfg(target_os = "linux")]
+pub fn since_boot(pid: i32) -> Option<SinceBoot> {
+    static BOOT: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
+    let boot = BOOT.get_or_init(|| {
+        let id = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").ok()?;
+        Some(id.trim().to_string()).filter(|id| !id.is_empty())
+    });
+    Some(SinceBoot { boot_id: boot.clone()?, ticks: start_ticks(pid)? })
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn since_boot(_: i32) -> Option<SinceBoot> {
+    None
+}
+
+/// `/proc/<pid>/stat`'s starttime: the clock ticks from the boot to the process's start.
+#[cfg(target_os = "linux")]
+fn start_ticks(pid: i32) -> Option<u64> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    // after the name in brackets (which may hold spaces and brackets), field 3 on: starttime is field 22
+    stat.get(stat.rfind(')')? + 2..)?.split(' ').nth(19)?.parse().ok()
+}
+
 /// The process's creation in unix ms, if it is still there to read.
 #[cfg(target_os = "linux")]
 pub fn of(pid: i32) -> Option<u64> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    // after the name in brackets (which may hold spaces and brackets), field 3 on: starttime is field 22
-    let ticks: u64 = stat.get(stat.rfind(')')? + 2..)?.split(' ').nth(19)?.parse().ok()?;
+    let ticks = start_ticks(pid)?;
     let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
     if hz <= 0 {
         return None;
@@ -179,6 +212,18 @@ mod tests {
         assert!(started <= now && started > now - 3_600_000, "started {started}, now {now}");
         assert_eq!(super::of(pid), Some(started));
         assert_eq!(super::of(i32::MAX), None);
+    }
+
+    #[test]
+    fn a_start_since_boot_is_told_on_linux_alone_and_reads_the_same_each_time() {
+        let pid = std::process::id() as i32;
+        let since = super::since_boot(pid);
+        assert_eq!(since.is_some(), cfg!(target_os = "linux"), "{since:?}");
+        if let Some(since) = &since {
+            assert_eq!(since.boot_id.len(), 36, "{since:?}");
+            assert_eq!(super::since_boot(pid).as_ref(), Some(since));
+        }
+        assert_eq!(super::since_boot(i32::MAX), None);
     }
 
     #[test]

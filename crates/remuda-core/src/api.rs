@@ -29,6 +29,7 @@ pub const FEATURES: &[&str] = &[
     "send_if_any_status",
     "literal_record",
     "foreground_started",
+    "foreground_since_boot",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.

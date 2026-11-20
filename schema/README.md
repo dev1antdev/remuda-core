@@ -193,6 +193,20 @@ terminal relayed from an added machine carries its own core's foreground, so a
 missing `started_ms` means unknown for that terminal (an older core there, or an
 OS that would not tell), whatever the first core's hello said.
 
+`started_since_boot` in a terminal's `foreground`, on Linux alone, is that
+process's start as its boot counts it, `{boot_id, ticks}`: the boot
+(`/proc/sys/kernel/random/boot_id`) and the clock ticks from it to the start
+(`/proc/<pid>/stat`'s starttime). No step of the wall clock moves it, where
+`started_ms` moves with one: after the clock went back by as much as a later
+process was born after the one before, both carry one `started_ms`, and only
+this tells them apart, compared whole with what the client reads of the
+process. It is read with `started_ms`, both the same before and after the rest
+of the look. On macOS and Windows `started_ms` is already the creation the OS
+stored when the process began (`proc_pidinfo`'s start, the creation FILETIME),
+which no step moves, and this field is absent. Cores advertise
+`foreground_since_boot` in `hello.features`; a missing field on a Linux
+terminal means unknown, as `started_ms`'s does.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,
@@ -220,7 +234,7 @@ Each event's `data`, and how to apply it to a snapshot:
 | `title` | `{title}` | set `title` |
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
-| `foreground` | `{pid, name, argv, cwd, started_ms}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
+| `foreground` | `{pid, name, argv, cwd, started_ms, started_since_boot}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
 | `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
 
 `events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`
