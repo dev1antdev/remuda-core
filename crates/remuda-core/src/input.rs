@@ -417,23 +417,15 @@ impl Core {
 
     /// Paste + Enter, after a person has paused typing. Refuses a blocked
     /// program (typing would answer its dialog) unless `force`.
-    /// With `front`, types only while that process group leads the terminal.
-    pub async fn send(
-        &self,
-        id: u32,
-        text: &str,
-        force: bool,
-        only_if: Option<&str>,
-        front: Option<i32>,
-    ) -> Result<Sent, RpcError> {
-        self.send_message(id, text, force, only_if, front, false).await
+    pub async fn send(&self, id: u32, text: &str, force: bool, only_if: Option<&str>) -> Result<Sent, RpcError> {
+        self.send_message(id, text, force, only_if, None, false).await
     }
 
     pub(crate) async fn send_first_task(&self, id: u32, text: &str) -> Result<Sent, RpcError> {
         self.send_message(id, text, false, None, None, true).await
     }
 
-    async fn send_message(
+    pub(crate) async fn send_message(
         &self,
         id: u32,
         text: &str,

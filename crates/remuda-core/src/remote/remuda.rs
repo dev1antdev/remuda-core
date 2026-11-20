@@ -5,25 +5,27 @@ use super::*;
 /// A viewer that types without setting the size, on a machine whose core would set it anyway.
 pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Option<RpcError> {
     let asked = params["keep_size"] == true && params["observe"] != true;
-    (asked && !line.features.iter().any(|f| f == "keep_size")).then(|| {
-        RpcError::new(
-            "needs_update",
-            format!("{}'s rc is older and can't keep the size for a viewer that types", m.name),
-            format!("rc machine update {}", m.name),
-        )
-    })
+    (asked && !line.features.iter().any(|f| f == "keep_size"))
+        .then(|| older(&m.name, true, "can't keep the size for a viewer that types"))
 }
 
-/// A send that names the process it is for, towards a core that would type it whoever is in front.
-pub(super) fn send_foreground_refused(line: &Line, name: &str, method: &str, params: &Value) -> Option<RpcError> {
+/// A send that names the process it is for, towards a core that would type it whoever is in front. `added`: a
+/// machine this core added, which `rc machine update` reaches; else a core that added us.
+pub(super) fn send_foreground_refused(
+    line: &Line,
+    name: &str,
+    added: bool,
+    method: &str,
+    params: &Value,
+) -> Option<RpcError> {
     let asked = method == "terminal.send" && !params["foreground"].is_null();
-    (asked && !line.features.iter().any(|f| f == "send_foreground")).then(|| {
-        RpcError::new(
-            "needs_update",
-            format!("{name}'s rc is older and can't check what is in front before it types"),
-            format!("rc machine update {name}"),
-        )
-    })
+    (asked && !line.features.iter().any(|f| f == "send_foreground"))
+        .then(|| older(name, added, "can't check what is in front before it types"))
+}
+
+fn older(name: &str, added: bool, cannot: &str) -> RpcError {
+    let hint = if added { format!("rc machine update {name}") } else { format!("update rc on {name}") };
+    RpcError::new("needs_update", format!("{name}'s rc is older and {cannot}"), hint)
 }
 
 /// The CLOSE reason of a relayed stream a core on its path is too old for.
@@ -42,11 +44,13 @@ mod tests {
         let old = Line::new(frames.clone(), &json!({"features": ["keep_size"]}));
         let current = Line::new(frames, &json!({"features": ["send_foreground"]}));
         let send = json!({"terminal": "t1", "text": "hi", "foreground": 42});
-        let refused = send_foreground_refused(&old, "away", "terminal.send", &send);
-        assert_eq!(refused.map(|e| e.kind), Some("needs_update".to_string()));
-        assert!(send_foreground_refused(&current, "away", "terminal.send", &send).is_none());
+        let refused = send_foreground_refused(&old, "away", true, "terminal.send", &send).unwrap();
+        assert_eq!((refused.kind.as_str(), refused.hint.as_str()), ("needs_update", "rc machine update away"));
+        let from_a_peer = send_foreground_refused(&old, "lead", false, "terminal.send", &send).unwrap();
+        assert_eq!(from_a_peer.hint, "update rc on lead");
+        assert!(send_foreground_refused(&current, "away", true, "terminal.send", &send).is_none());
         let plain = json!({"terminal": "t1", "text": "hi"});
-        assert!(send_foreground_refused(&old, "away", "terminal.send", &plain).is_none());
+        assert!(send_foreground_refused(&old, "away", true, "terminal.send", &plain).is_none());
     }
 
     #[derive(Clone, Copy, PartialEq)]

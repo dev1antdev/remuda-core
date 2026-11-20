@@ -1,7 +1,7 @@
 //! remuda's own (REMUDA.md): a send that types only while the program it is for leads the terminal, so an
 //! agent that left while the send waited for a person's draft never has its message run by the shell behind it.
 
-use crate::input::Step;
+use crate::input::{Sent, Step};
 use crate::rpc::RpcError;
 use crate::runtime::Core;
 use crate::terminals::Terminal;
@@ -22,6 +22,7 @@ pub(crate) fn last_seen(t: &Terminal, pid: i32) -> Result<(), RpcError> {
     }
 }
 
+/// Before the paste: `status_mismatch`, nothing typed. After it: `not_submitted`, the text left where it went.
 fn moved(id: u32, pid: i32, now: i32, pasted: bool) -> RpcError {
     let address = crate::terminals::address(id);
     let message = if now > 0 {
@@ -29,16 +30,34 @@ fn moved(id: u32, pid: i32, now: i32, pasted: bool) -> RpcError {
     } else {
         format!("{address}'s foreground could not be read, so {pid} may have left")
     };
-    let hint = if pasted { "the text was pasted but not submitted" } else { "nothing was typed" };
-    RpcError::new("status_mismatch", message, hint)
+    if pasted {
+        RpcError::new("not_submitted", message, "the text was pasted but not submitted: read the terminal")
+    } else {
+        RpcError::new("status_mismatch", message, "nothing was typed")
+    }
 }
 
 impl Core {
-    /// Ok while process group `pid` leads terminal `id`'s foreground; otherwise `status_mismatch`, saying whether
-    /// the paste went in already. A foreground that cannot be read counts as another.
+    /// `send`, typing only while process group `front` leads the terminal.
+    pub async fn send_for(
+        &self,
+        id: u32,
+        text: &str,
+        force: bool,
+        only_if: Option<&str>,
+        front: Option<i32>,
+    ) -> Result<Sent, RpcError> {
+        self.send_message(id, text, force, only_if, front, false).await
+    }
+
+    /// Ok while process group `pid` leads terminal `id`'s foreground (a foreground that cannot be read counts as
+    /// another), and before the paste while the caller still waits for it.
     pub(crate) async fn in_front(&self, id: u32, pid: i32, pasted: bool) -> Result<(), RpcError> {
         let now = self.foreground(id).await;
-        if now > 0 && now == pid { Ok(()) } else { Err(moved(id, pid, now, pasted)) }
+        if now <= 0 || now != pid {
+            return Err(moved(id, pid, now, pasted));
+        }
+        if pasted { Ok(()) } else { crate::server::check_cancelled() }
     }
 }
 

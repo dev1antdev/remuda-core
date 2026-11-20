@@ -534,7 +534,6 @@ Options:
       --force              Type even if the program is blocked (it may answer its dialog)
       --json               JSON output even in a terminal
       --if <STATUS>        Only type if the status is exactly this [possible values: idle, working]
-      --foreground <PID>   Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste and again before Enter; otherwise `status_mismatch`
       --wait               Then wait for the turn this send started
       --timeout <TIMEOUT>  With wait: seconds before it checks in (default: config, else 180)
   -h, --help               Print help

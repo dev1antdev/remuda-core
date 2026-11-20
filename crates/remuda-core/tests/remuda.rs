@@ -225,6 +225,11 @@ fn in_front(s: &Session, t: &str) -> i64 {
     get(s, t)["foreground"]["pid"].as_i64().unwrap_or(0)
 }
 
+/// `terminal.send` naming the process it is for (API only: the CLI has no flag for it).
+fn send_for(s: &Session, t: &str, text: &str, front: i64) -> serde_json::Value {
+    s.connect().call(1, "terminal.send", json!({"terminal": t, "text": text, "foreground": front}))
+}
+
 #[test]
 fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
     let mut s = session("0");
@@ -240,17 +245,18 @@ fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
     person.typed(b"draft");
     person.shows("draft");
     std::thread::scope(|scope| {
-        let send = scope.spawn(|| s.err(&["send", &t, "echo SENT-$((6*7))", "--foreground", &sleep.to_string()]));
+        let send = scope.spawn(|| send_for(&s, &t, "echo SENT-$((6*7))", sleep));
         std::thread::sleep(Duration::from_millis(300));
         unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
-        let (_, err) = send.join().unwrap();
-        assert_eq!(err["error"]["kind"], "status_mismatch", "{err}");
-        assert!(err["error"]["hint"].as_str().unwrap().contains("nothing was typed"), "{err}");
+        let reply = send.join().unwrap();
+        assert_eq!(reply["error"]["data"]["kind"], "status_mismatch", "{reply}");
+        assert_eq!(reply["error"]["data"]["hint"], "nothing was typed", "{reply}");
     });
     wait_until("the shell in front again", || in_front(&s, &t) == shell);
     person.typed(b"\x15");
     std::thread::sleep(Duration::from_millis(300));
     assert!(!text(&s, &t).contains("SENT"), "typed into the shell: {}", text(&s, &t));
-    s.json(&["send", &t, "echo SENT-$((6*7))", "--foreground", &shell.to_string()]);
+    let reply = send_for(&s, &t, "echo SENT-$((6*7))", shell);
+    assert!(reply["error"].is_null(), "{reply}");
     wait_until("a send naming what is in front goes in", || text(&s, &t).contains("SENT-42"));
 }

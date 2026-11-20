@@ -939,19 +939,3 @@ fn a_lost_kept_terminal_shows_what_its_program_left_above_the_new_shell() {
     let at = |needle: &str| text.find(needle).unwrap_or_else(|| panic!("{needle:?} missing: {text:?}"));
     assert!(at("left-on-screen") < at("this is a new shell") && at("this is a new shell") < at("after-2"), "{text:?}");
 }
-
-#[test]
-fn a_send_types_only_while_the_process_it_names_is_in_front() {
-    let s = Session::new();
-    let t = s.bg(&["powershell", "-NoProfile", "-Command", "$x = Read-Host 'name'; \"got-$x\""]);
-    s.shows(&t, "name");
-    wait_until("its foreground", || s.json(&["get", &t])["foreground"]["pid"].as_i64().is_some());
-    let front = s.json(&["get", &t])["foreground"]["pid"].as_i64().unwrap();
-    let (code, _) = s.out(&["send", &t, "eve", "--foreground", &(front + 1).to_string()]);
-    assert_eq!(code, 10, "another process in front is status_mismatch");
-    assert!(!s.read(&t).contains("eve"), "typed for a process not in front");
-    s.json(&["send", &t, "bob", "--foreground", &front.to_string()]);
-    let end = s.json(&["wait", &t, "--timeout", "15"]);
-    assert_eq!(end["reason"], "exit", "{end}");
-    assert!(s.read(&t).contains("got-bob"));
-}

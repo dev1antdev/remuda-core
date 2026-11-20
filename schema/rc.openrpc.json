@@ -2609,7 +2609,7 @@
       }
     },
     {
-      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter.",
+      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (the text left unsubmitted).",
       "errors": [
         {
           "code": -32000,
@@ -2652,6 +2652,13 @@
             "kind": "status_mismatch"
           },
           "message": "status_mismatch"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "not_submitted"
+          },
+          "message": "not_submitted"
         },
         {
           "code": -32602,
@@ -2708,11 +2715,11 @@
           }
         },
         {
-          "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter; otherwise `status_mismatch`.",
+          "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted`. API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
           "name": "foreground",
           "required": false,
           "schema": {
-            "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter; otherwise `status_mismatch`.",
+            "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted`. API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
             "format": "int32",
             "type": [
               "integer",

@@ -171,14 +171,17 @@ stand. Cores advertise `output_watches` in `hello.features`; clients send
 and never tells.
 
 `foreground: <pid>` on `terminal.send` types only while that process group leads
-the terminal (the `pid` of its `foreground`): refused as `status_mismatch` when the
-core's last look already saw another, then looked at afresh before the paste and
-again before Enter, so a program that left while the send waited for a person's
-draft never has the text run by the shell behind it (refused after the paste, the
-text is left unsubmitted, as the hint says). Cores advertise `send_foreground` in
-`hello.features`; a relay refuses the field towards a core that does not
-(`needs_update`). Clients send it only to a core that lists it: an older core
-ignores it and types whatever is in front.
+the terminal (the `pid` of its `foreground`, the core's own pick on Windows, where
+a pseudo console has no foreground group: check its `name` is the program you
+mean). Refused as `status_mismatch` when the core's last look already saw another,
+then looked at afresh before the paste (`status_mismatch`: nothing typed) and again
+before Enter (`not_submitted`: the text was pasted and left there unsubmitted, so
+read the terminal before sending again). It narrows, it cannot close: a program that
+stops reading while still in front leaves what was typed to whatever reads the
+terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
+refuses the field towards a core that does not (`needs_update`). Clients send it
+only to a core that lists it: an older core ignores it and types whatever is in
+front. The CLI has no flag for it.
 
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,
