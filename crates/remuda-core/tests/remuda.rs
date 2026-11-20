@@ -208,10 +208,7 @@ fn an_output_watch_outlives_a_kept_terminal_restarting() {
     assert_eq!(line(&mut events), "one FAIL");
     let old = get(&s, &t)["pid"].as_i64().unwrap();
     s.json(&["send", &t, "go"]);
-    wait_until("replacement shell", || {
-        let r = get(&s, &t);
-        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
-    });
+    replaced(&s, &t, old);
     s.json(&["send", &t, "printf 'two FAIL\\n'"]);
     let mut heard = line(&mut events);
     if heard == "gone FAIL" {
@@ -223,6 +220,14 @@ fn an_output_watch_outlives_a_kept_terminal_restarting() {
 /// The process group in front of `t`, once the core has looked (0 before).
 fn in_front(s: &Session, t: &str) -> i64 {
     get(s, t)["foreground"]["pid"].as_i64().unwrap_or(0)
+}
+
+/// Waits for keep to give the terminal a new shell in place of the program `old` was.
+fn replaced(s: &Session, t: &str, old: i64) {
+    wait_until("replacement shell", || {
+        let r = get(s, t);
+        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
+    });
 }
 
 /// `terminal.send` naming the process it is for (API only: the CLI has no flag for it).
@@ -362,4 +367,58 @@ fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
         let reply = run_api(&s, params);
         assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");
     }
+}
+
+#[test]
+fn a_terminals_record_says_whether_it_was_run_literally() {
+    let s = session("0");
+    let literal = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true}));
+    assert_eq!(literal["result"]["literal"], true, "{literal}");
+    assert_eq!(get(&s, literal["result"]["address"].as_str().unwrap())["literal"], true);
+    let plain = run_api(&s, json!({"argv": ["sleep", "100"]}));
+    assert_eq!(plain["result"]["literal"], false, "{plain}");
+}
+
+#[test]
+fn the_shell_keep_gives_a_lost_literal_run_is_not_literal() {
+    let s = session("0");
+    let reply = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true, "keep": true}));
+    let t = reply["result"]["address"].as_str().unwrap().to_string();
+    let old = get(&s, &t)["pid"].as_i64().unwrap();
+    let holder = s.json(&["server", "status"])["holder"]["pid"].as_i64().unwrap();
+    unsafe { libc::kill(holder as i32, libc::SIGKILL) };
+    replaced(&s, &t, old);
+    assert_eq!(get(&s, &t)["literal"], false);
+}
+
+#[test]
+fn a_literal_run_stays_literal_until_keeps_shell_has_started() {
+    use std::os::unix::fs::PermissionsExt;
+    let mut s = session("0");
+    let shell = s.root.join("shell");
+    s.env.push(("SHELL".into(), shell.display().to_string()));
+    let reply = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true, "keep": true}));
+    let t = reply["result"]["address"].as_str().unwrap().to_string();
+    s.json(&["server", "stop"]);
+    get(&s, &t);
+    std::thread::sleep(Duration::from_secs(2)); // its shell is missing: the first replacement fails
+    let r = get(&s, &t);
+    assert!(r["pid"].is_null() && r["reason"].is_string() && r["literal"] == true, "{r}");
+    std::fs::write(&shell, "#!/bin/sh\nexec /bin/sh\n").unwrap();
+    std::fs::set_permissions(&shell, std::fs::Permissions::from_mode(0o700)).unwrap();
+    wait_until_for("keep's shell", Duration::from_secs(30), || get(&s, &t)["pid"].is_number());
+    assert_eq!(get(&s, &t)["literal"], false);
+}
+
+#[test]
+fn a_record_a_core_before_literal_record_wrote_says_nothing_of_literal() {
+    let s = session("0");
+    run_api(&s, json!({"argv": ["sleep", "100"], "literal": true}));
+    let state = std::fs::read_to_string(s.root.join("state/remuda-core/test/terminals.json")).unwrap();
+    let mut record = serde_json::from_str::<serde_json::Value>(&state).unwrap()["terminals"]["1"].take();
+    assert_eq!(record["literal"], true, "{record}");
+    record.as_object_mut().unwrap().remove("literal"); // as a core without the feature saves it
+    let loaded: remuda_core::terminals::Terminal = serde_json::from_value(record).unwrap();
+    let public = serde_json::to_value(remuda_core::terminals::Public(loaded)).unwrap();
+    assert!(public.get("literal").is_none(), "unknown, not false: {public}");
 }

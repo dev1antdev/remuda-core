@@ -236,6 +236,20 @@ return `unavailable`: "lost, waiting for its new shell"; retry after `restarted`
 Server stop parks kept terminals; the next core start gives them fresh shells.
 Waits end on `lost` as on `finished`: they follow the program, not the kept record.
 
+A terminal's record carries `literal`: true for a terminal a `literal: true`
+run started, false for any other, and false once keep's shell has started in
+place of that program (`restarted` carries it). It stays true while the terminal
+waits for that shell (`pid` null, a `reason` set), through replacements that
+fail, and once it has finished, though nothing runs then: read `pid` and
+`reason` with it. So a client tells the program it started as it is, a shell's
+`sh -c '…'` among them, from the shell keep later gave the terminal, whatever
+their argv. Cores advertise `literal_record` in `hello.features`. A record a
+core without it wrote has no `literal`, and keeps none when an update adopts
+the terminal (a rollback and an update again included): unknown, not false.
+So a client runs `literal` only on a core that lists both `run_literal` and
+`literal_record`, and reads a missing `literal` as unknown; a record relayed
+from an added machine is that core's own.
+
 An initial spawn that times out remains claimed with `reason: "spawn_pending"`;
 input/attach are unavailable until the holder answers. It may already be running,
 so core does not clear the claim or start another program on a guess. Explicit
