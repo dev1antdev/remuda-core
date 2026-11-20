@@ -167,10 +167,11 @@ update, when the core that would type does not list the feature: read
 milliseconds, as the OS records it, a floor: on macOS the start `ps -o lstart`
 prints; on Linux the start since boot, to the kernel's tick, after the boot time
 (`/proc/stat`'s whole second, as ps counts it, with the fraction the clocks
-tell), so its second is `ps -o lstart`'s or the next, and a step of the wall
-clock moves it as it moves ps's (the core tells each terminal's foreground again
-once); on Windows the creation FILETIME. A look the core took is told only while
-the terminal still runs the program it was taken under. It tells the process in front from a later one given the same pid, so a
+tell, read within a millisecond), so its second is `ps -o lstart`'s or the next,
+and a step of the wall clock moves it as it moves ps's (the core tells each
+terminal's foreground again once); on Windows the creation FILETIME. A look the
+core took is told only while the terminal still runs the program it was taken
+under (the same pid, started by the core at the same moment). It tells the process in front from a later one given the same pid, so a
 client that reads a process itself (its session files, say) can check that it
 read the one the core saw: a start that differs is another process, or one it
 cannot tell, never the same. A second alone does not tell two processes that

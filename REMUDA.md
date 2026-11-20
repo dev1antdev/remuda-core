@@ -176,20 +176,22 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `tests/remuda.rs`.
 - A terminal's `foreground` carries `started_ms` (`foreground_started` in hello's features): when
   that process was created, unix ms, a floor, as the OS records it (Linux `/proc/<pid>/stat`'s
-  start after the boot time, `/proc/stat`'s whole second with the fraction the clocks tell, kept
-  until either moves past a reading's jitter, so its second is ps's
+  start after the boot time, `/proc/stat`'s whole second with the fraction the clocks tell (the
+  real clock read between two looks at the time since boot a millisecond apart at most,
+  `bracketed`), kept until either moves past a reading's jitter, so its second is ps's
   `lstart` or the next, and a step moves it as it moves ps's, the core telling each foreground
   again once; macOS `proc_pidinfo`'s BSD info; Windows `GetProcessTimes`), read between two of the
   holder's answers naming that process group, its start before and after the rest, and on Unix
   only for a process of the terminal's session (`getsid`, its program being its session's
   leader), a look where either moved or that found another terminal's process telling none; so
   remuda tells the process the core saw from a later one given its pid before it reads that
-  process's session. Ours: `remuda-core/src/started.rs` (`of`, `boot_ms`, `in_session` and
-  `Core::foreground_now`, with their tests); in upstream's files the field and
+  process's session. Ours: `remuda-core/src/started.rs` (`of`, `boot_ms`, `bracketed`, `settle`,
+  `in_session`, `Program` and `Core::foreground_now`, with their tests); in upstream's files the field and
   `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal,
   `watch_foreground` calling `foreground_now` where it asked the holder and read `about`, and
-  keeping its look only while the terminal's program is the one it was read under (a `lost` or a
-  restart meanwhile leaves it for the next look),
+  keeping its look only while the terminal's program is the one it was read under (`Program`: its
+  pid and `program_started_ms`, so a `lost` or a restart meanwhile, the same pid's too, leaves it
+  for the next look),
   `pub mod started;` in `lib.rs`, the feature in `api.rs`, the `foreground` row and a section of
   its own, "Fields newer cores add", in `schema/README.md`, the generated schema; the end-to-end
   test is ours, in `tests/remuda.rs`.

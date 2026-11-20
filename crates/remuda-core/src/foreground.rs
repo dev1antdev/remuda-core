@@ -168,7 +168,9 @@ impl Core {
             for id in live {
                 let (now, program) = self.foreground_now(id).await;
                 let mut st = self.lock();
-                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live() && t.pid == program) else {
+                let Some(t) =
+                    st.reg.terminals.get_mut(&id).filter(|t| t.is_live() && crate::started::Program::of(t) == program)
+                else {
                     continue;
                 };
                 let at_shell = crate::platform::foreground_tracks_jobs()

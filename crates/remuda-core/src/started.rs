@@ -7,24 +7,38 @@ use crate::foreground::Foreground;
 use crate::runtime::Core;
 
 impl Core {
-    /// What is in front of terminal `id`, with the terminal's program it was read under, which the caller keeps the
-    /// look for (a program gone or replaced since, the look is of a terminal that is no more): the facts and the
+    /// What is in front of terminal `id`, with the terminal's program it was read under (its pid and when the core
+    /// started it, which a replacement given the same pid does not share), which the caller keeps the look for (a
+    /// program gone or replaced since, the look is of a terminal that is no more): the facts and the
     /// creation of the process group its holder names, read between two of its answers that name the same group, the
     /// creation read before and after the facts, and on Unix only a process of the terminal's own session (its
     /// program's: every process in front of it is in it). A process that left meanwhile, and with it a pid given to a
     /// process of another terminal, tells nothing this look, though the terminal still names the group it led.
-    pub(crate) async fn foreground_now(&self, id: u32) -> (Option<Foreground>, Option<u32>) {
-        let program = self.lock().reg.terminals.get(&id).and_then(|t| t.pid);
+    pub(crate) async fn foreground_now(&self, id: u32) -> (Option<Foreground>, Program) {
+        let program = self.lock().reg.terminals.get(&id).map(Program::of).unwrap_or_default();
         let pgid = self.foreground(id).await;
         if pgid <= 0 {
             return (None, program);
         }
         let before = of(pgid);
         let Some(facts) = crate::foreground::about(pgid) else { return (None, program) };
-        let ours = in_session(pgid, program);
+        let ours = in_session(pgid, program.pid);
         let after = of(pgid);
         let same = before == after && ours && self.foreground(id).await == pgid;
         (same.then_some(Foreground { started_ms: after, ..facts }), program)
+    }
+}
+
+/// A terminal's program: its pid and when the core started it.
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
+pub(crate) struct Program {
+    pid: Option<u32>,
+    started_ms: Option<u64>,
+}
+
+impl Program {
+    pub(crate) fn of(t: &crate::terminals::Terminal) -> Program {
+        Program { pid: t.pid, started_ms: t.program_started_ms }
     }
 }
 
@@ -54,7 +68,8 @@ pub fn of(pid: i32) -> Option<u64> {
 }
 
 /// When this machine booted, unix ms: `/proc/stat`'s whole second, as ps counts it, with the fraction the real clock
-/// less the time since boot tells.
+/// less the time since boot tells, read between two looks at the latter no more than a millisecond apart (else what
+/// was kept, or none).
 #[cfg(target_os = "linux")]
 fn boot_ms() -> Option<u64> {
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -68,13 +83,26 @@ fn boot_ms() -> Option<u64> {
         .ok()?;
     let clock = |id| {
         let mut t: libc::timespec = unsafe { std::mem::zeroed() };
-        (unsafe { libc::clock_gettime(id, &mut t) } == 0)
-            .then(|| t.tv_sec as i128 * 1000 + t.tv_nsec as i128 / 1_000_000)
+        (unsafe { libc::clock_gettime(id, &mut t) } == 0).then(|| t.tv_sec as i128 * 1_000_000_000 + t.tv_nsec as i128)
     };
-    let measured = u64::try_from(clock(libc::CLOCK_REALTIME)? - clock(libc::CLOCK_BOOTTIME)?).ok()?;
-    let boot = settle(KEPT.load(Ordering::Relaxed), whole, measured);
+    let look = || Some((clock(libc::CLOCK_BOOTTIME)?, clock(libc::CLOCK_REALTIME)?, clock(libc::CLOCK_BOOTTIME)?));
+    let kept = KEPT.load(Ordering::Relaxed);
+    let Some(measured) = bracketed((0..3).map_while(|_| look())) else {
+        return (kept != 0).then_some(kept);
+    };
+    let boot = settle(kept, whole, u64::try_from(measured / 1_000_000).ok()?);
     KEPT.store(boot, Ordering::Relaxed);
     Some(boot)
+}
+
+/// The boot time in ns of the first look (since boot, real, since boot again) whose two looks since boot are no
+/// more than a millisecond apart: the real clock was read within it. None when every look was held up longer.
+#[cfg(any(target_os = "linux", test))]
+fn bracketed(looks: impl Iterator<Item = (i128, i128, i128)>) -> Option<i128> {
+    looks
+        .filter(|(first, _, last)| last - first <= 1_000_000)
+        .map(|(first, real, last)| real - (first + last) / 2)
+        .next()
 }
 
 /// The boot time to tell, given the one kept, ps's whole second and a fresh measure: always in ps's second, so a
@@ -82,7 +110,7 @@ fn boot_ms() -> Option<u64> {
 /// measure, so a reading's jitter moves no creation, and the measure when ps's second moved or the clock stepped.
 #[cfg(any(target_os = "linux", test))]
 fn settle(kept: u64, whole: u64, measured: u64) -> u64 {
-    const STEP_MS: u64 = 50;
+    const STEP_MS: u64 = 5;
     let measured = measured.clamp(whole * 1000, whole * 1000 + 999);
     if kept / 1000 == whole && kept.abs_diff(measured) <= STEP_MS { kept } else { measured }
 }
@@ -138,9 +166,27 @@ mod tests {
         assert_eq!(settle(0, 1000, 1_000_800), 1_000_800, "first reading");
         assert_eq!(settle(1_000_800, 1000, 1_000_801), 1_000_800, "a reading's jitter moves nothing");
         assert_eq!(settle(1_000_990, 1001, 1_001_020), 1_001_020, "a small correction across ps's second");
-        assert_eq!(settle(1_000_800, 1000, 1_000_900), 1_000_900, "a step past the jitter");
+        assert_eq!(settle(1_000_800, 1000, 1_000_840), 1_000_840, "a step past the jitter");
         assert_eq!(settle(1_000_800, 1000, 999_999), 1_000_000, "a measure outside ps's second is held to it");
         assert_eq!(settle(1_000_800, 1000, 1_001_003), 1_000_999);
+    }
+
+    #[test]
+    fn a_boot_time_measured_while_held_up_is_never_taken() {
+        let ms = 1_000_000;
+        let (boot, since) = (1_000_800 * ms, 10_000 * ms);
+        let held_up = (since, boot + since + 40 * ms, since + 40 * ms);
+        let prompt = (since + 50 * ms, boot + since + 50 * ms + ms / 2, since + 51 * ms);
+        assert_eq!(super::bracketed([held_up, prompt].into_iter()), Some(boot));
+        assert_eq!(super::bracketed([held_up, held_up, held_up].into_iter()), None);
+    }
+
+    #[test]
+    fn a_program_started_again_under_its_pid_is_another_program() {
+        let before = super::Program { pid: Some(7), started_ms: Some(1000) };
+        let after = super::Program { pid: Some(7), started_ms: Some(1500) };
+        assert_ne!(before, after);
+        assert_ne!(before, super::Program { pid: None, started_ms: None }, "lost");
     }
 
     #[cfg(unix)]
