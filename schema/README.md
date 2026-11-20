@@ -161,6 +161,38 @@ and types nothing, and a relay refuses them the same way, its hint naming the
 update, when the core that would type does not list the feature: read
 `invalid_params` as an older core, whatever the first core's hello said.
 
+## Fields newer cores add
+
+`started_ms` in a terminal's `foreground` is when that process was created, unix
+milliseconds, as the OS records it, a floor: on macOS the start `ps -o lstart`
+prints; on Linux the start since boot, to the kernel's tick, after the boot time
+(`/proc/stat`'s whole second, as ps counts it, with the fraction the clocks
+tell, read within a millisecond), so its second is `ps -o lstart`'s or the next,
+and a step of the wall clock moves it as it moves ps's (the core tells each
+terminal's foreground again once); on Windows the creation FILETIME. A look the
+core took is told only while the terminal still runs the program it was taken
+under (the same pid, from the same spawn). It tells the process in front from a later one given the same pid, so a
+client that reads a process itself (its session files, say) can check that it
+read the one the core saw: a start that differs is another process, or one it
+cannot tell, never the same. A second alone does not tell two processes that
+took one pid within it apart, so a client also checks a finer time the process
+records itself when it has one (Claude Code's `startedAt`, in ms, is never
+before `started_ms`); on Linux a program's own record of its start does not
+follow a step of the clock as `started_ms` and `ps` do, so after a step such a
+check cannot tell, which reads as no match. Times alone cannot tell a record a
+crashed process left from one of a later process given its pid, when a step of
+the clock put both starts in one second: `started_ms` is what the OS keeps, and
+no more than wall-clock times can be compared with a program's own record of
+them. The process is read between two of the terminal's own answers naming it in
+front, its start before and after the rest, and on Unix it must be in the
+terminal's session (that of its program, which every process in front of it is
+in): a look where the start moved, the terminal named another, or the process is
+another terminal's (its pid given out again while the terminal still names the
+group it led) tells no foreground. Cores advertise `foreground_started` in `hello.features`; a
+terminal relayed from an added machine carries its own core's foreground, so a
+missing `started_ms` means unknown for that terminal (an older core there, or an
+OS that would not tell), whatever the first core's hello said.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,
@@ -188,7 +220,7 @@ Each event's `data`, and how to apply it to a snapshot:
 | `title` | `{title}` | set `title` |
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
-| `foreground` | `{pid, name, argv, cwd}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
+| `foreground` | `{pid, name, argv, cwd, started_ms}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
 | `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
 
 `events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`

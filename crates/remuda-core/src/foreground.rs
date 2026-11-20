@@ -17,6 +17,9 @@ pub struct Foreground {
     pub argv: Vec<String>,
     /// Its working directory now (resolved by the OS).
     pub cwd: String,
+    /// When it was created, unix ms, as the OS records it: what tells it from a later process given its pid.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_ms: Option<u64>,
 }
 
 /// The facts about `pid`, if it is still there to read.
@@ -27,7 +30,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     let argv =
         cmdline.split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
     let cwd = std::fs::read_link(format!("/proc/{pid}/cwd")).ok()?.display().to_string();
-    Some(Foreground { pid, name, argv, cwd })
+    Some(Foreground { pid, name, argv, cwd, started_ms: None })
 }
 
 /// A pseudo console has no foreground group: this is the program the
@@ -89,7 +92,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
         .into_iter()
         .map(|arg| arg.to_string_lossy().into_owned())
         .collect();
-    Some(Foreground { pid, name, argv, cwd })
+    Some(Foreground { pid, name, argv, cwd, started_ms: None })
 }
 
 #[cfg(target_os = "macos")]
@@ -104,7 +107,7 @@ pub fn about(pid: i32) -> Option<Foreground> {
     }
     let path = unsafe { std::ffi::CStr::from_ptr(vnode.pvi_cdir.vip_path.as_ptr().cast()) };
     let (argv, _) = procargs(pid)?;
-    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned() })
+    Some(Foreground { pid, name, argv, cwd: path.to_string_lossy().into_owned(), started_ms: None })
 }
 
 /// KERN_PROCARGS2: argc, the executable path, the arguments, then the
@@ -163,10 +166,11 @@ impl Core {
             tokio::time::sleep(Duration::from_millis(ms)).await;
             let live: Vec<u32> = self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect();
             for id in live {
-                let pgid = self.foreground(id).await;
-                let now = (pgid > 0).then(|| about(pgid)).flatten();
+                let (now, program) = self.foreground_now(id).await;
                 let mut st = self.lock();
-                let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live()) else {
+                let Some(t) =
+                    st.reg.terminals.get_mut(&id).filter(|t| t.is_live() && crate::started::Program::of(t) == program)
+                else {
                     continue;
                 };
                 let at_shell = crate::platform::foreground_tracks_jobs()
@@ -201,7 +205,8 @@ mod tests {
     #[test]
     fn command_flags_keep_shell_roots_from_clearing_live_status() {
         for shell in ["sh", "bash", "zsh", "fish", "nu", "dash", "ksh", "tcsh"] {
-            let mut root = Foreground { pid: 1, name: shell.into(), argv: vec![shell.into()], cwd: "/".into() };
+            let mut root =
+                Foreground { pid: 1, name: shell.into(), argv: vec![shell.into()], cwd: "/".into(), started_ms: None };
             assert!(shell_root(&root), "{shell}");
             for arg in ["-i", "-li", "--login", "--no-config"] {
                 root.argv = vec![shell.into(), arg.into()];
