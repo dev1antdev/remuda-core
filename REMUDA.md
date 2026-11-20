@@ -149,18 +149,18 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   too), the generated schema; the end-to-end tests are ours, in `tests/remuda.rs`.
 - `terminal.send`'s `if` (`rc send --if`) takes every status word a program reports, `done`,
   `blocked` and `error` besides `idle` and `working` (`send_if_any_status` in hello's features): a
-  send for a program at rest whose status moved while it waited for a person's draft, or, with
-  `foreground`, during the look before the paste, is refused as `status_mismatch`, nothing typed,
-  rather than land in the turn that person started (`blocked` keeps its own refusal first, unless
-  `force`). An older core refuses the newer words as `invalid_params`, nothing typed, and a relay
+  send for a program at rest whose status moved while it waited for a person's draft, or by the time
+  its paste is written (checked under the lock it is written under, after any `foreground` look), is
+  refused as `status_mismatch`, nothing typed, rather than land in the turn that person started
+  (`blocked` keeps its own refusal first, unless `force`). An older core refuses the newer words as `invalid_params`, nothing typed, and a relay
   refuses them the same way, with the update in its hint, towards the core that would type when it
   lacks the feature (the kind kept, since remuda reads `invalid_params` as an older core). Ours:
-  `refused`'s `if` arm in `remote/remuda.rs` and `still` in `front.rs` (with their tests); in
-  upstream's files the three variants and a doc line on `IdleOrWorking` in `api/types.rs` (its name
-  kept, so upstream's lines still apply), the `if` word carried by the `Front` step before the paste
-  (its field in `input.rs`, its arm and `guard`'s call there passing it on), the feature in
-  `api.rs`, a paragraph in `schema/README.md`, the generated docs and schema; the end-to-end tests
-  are ours, in `tests/remuda.rs`.
+  `refused`'s `if` arm in `remote/remuda.rs`, and `conditional`, `paste_if` and `still` in
+  `front.rs` (with their tests); in upstream's files the three variants and a doc line on
+  `IdleOrWorking` in `api/types.rs` (its name kept, so upstream's lines still apply), the `Paste`
+  step and its arm in `input.rs`'s `type_in` with the line in `send_message` that makes a send's
+  paste one, the feature in `api.rs`, a paragraph in `schema/README.md`, the generated docs and
+  schema; the end-to-end tests are ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

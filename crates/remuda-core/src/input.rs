@@ -260,7 +260,12 @@ pub enum Step {
     Front {
         pid: i32,
         pasted: bool,
-        status: Option<String>,
+    },
+    /// The paste of a send naming `if`, written only while the status is still that word (remuda's, `front.rs`).
+    Paste {
+        bytes: Vec<u8>,
+        only_if: String,
+        force: bool,
     },
 }
 
@@ -381,8 +386,14 @@ impl Core {
         let mut refused = None;
         for step in steps {
             match step {
-                Step::Front { pid, pasted, status } => {
-                    if let Err(e) = self.in_front(id, pid, pasted, status.as_deref()).await {
+                Step::Front { pid, pasted } => {
+                    if let Err(e) = self.in_front(id, pid, pasted).await {
+                        refused = Some(e);
+                        break;
+                    }
+                }
+                Step::Paste { bytes, only_if, force } => {
+                    if let Err(e) = self.paste_if(id, &bytes, &only_if, force) {
                         refused = Some(e);
                         break;
                     }
@@ -480,9 +491,10 @@ impl Core {
                 let gap = t.paste_gap_ms.map_or(PASTE_GAP, Duration::from_millis);
                 let bytes = paste(screen.dec_mode(2004), text);
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
+                let paste = crate::front::conditional(paste, only_if, force);
                 let mut steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
                 if let Some(pid) = front {
-                    crate::front::guard(&mut steps, pid, only_if);
+                    crate::front::guard(&mut steps, pid);
                 }
                 Ok(((word, t.turn, t.reported), steps))
             })

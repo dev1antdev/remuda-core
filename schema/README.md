@@ -151,8 +151,8 @@ program's place. The CLI has no flag for it.
 `if` on `terminal.send` takes every status word a program reports (`idle`,
 `working`, `done`, `blocked`, `error`), where it took `idle` and `working` alone.
 The latest status the core has seen is looked at when the send's turn comes, after
-any draft a person is finishing, and with `foreground` again after its look, right
-before the paste: another word, or none, is `status_mismatch` and nothing is
+any draft a person is finishing, and again as the paste is written (after the look
+`foreground` asks for): another word, or none, is `status_mismatch` and nothing is
 typed, so a send for a program at rest (`done`, say) never lands in a turn a person
 started meanwhile. A program found `blocked` is still refused as `blocked` first
 unless `force`, whatever `if` names. Cores advertise `send_if_any_status` in
