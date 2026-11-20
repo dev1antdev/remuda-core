@@ -65,7 +65,9 @@ pub struct Watch {
     /// The matching rows standing at the last look, each with how many times it stands.
     seen: HashMap<String, usize>,
     /// Rows seen and not told yet, each with whether it stood there when the watch began.
-    pending: VecDeque<(String, bool)>,
+    /// Rows seen and not told yet, as told: the text, whether it stood there when
+    /// the watch began, whether it was cut.
+    pending: VecDeque<(String, bool, bool)>,
     pending_bytes: usize,
     /// Rows dropped from a full `pending`, told with the next row that is sent.
     lost: usize,
@@ -80,12 +82,25 @@ enum Find {
 }
 
 impl Find {
-    fn matches(&self, row: &str) -> bool {
+    /// Where in `row` it matches first.
+    fn find(&self, row: &str) -> Option<std::ops::Range<usize>> {
         match self {
-            Find::Text(text) => row.contains(text.as_str()),
-            Find::Pattern(re) => re.is_match(row),
+            Find::Text(text) => row.find(text.as_str()).map(|at| at..at + text.len()),
+            Find::Pattern(re) => re.find(row).map(|m| m.range()),
         }
     }
+}
+
+/// `line` as told: whole, or past `MAX_LINE` the `MAX_LINE` around what matched
+/// (from its start when the match itself is longer), with whether it was cut.
+fn excerpt(line: &str, at: std::ops::Range<usize>) -> (String, bool) {
+    if line.len() <= MAX_LINE {
+        return (line.to_string(), false);
+    }
+    let around = MAX_LINE.saturating_sub(at.len()) / 2;
+    let start = line.floor_char_boundary(at.start.saturating_sub(around).min(line.len() - MAX_LINE));
+    let end = line.ceil_char_boundary(start + MAX_LINE);
+    (line[start..end].to_string(), true)
 }
 
 /// Checks and compiles the watches a subscription asks for.
@@ -253,13 +268,13 @@ fn recent(core: &Core, st: &crate::runtime::State, w: &Watch) -> Option<Vec<Stri
 fn observe(w: &mut Watch, lines: &[String]) {
     let fresh = !w.looked;
     let mut standing: HashMap<String, usize> = HashMap::new();
-    for line in lines.iter().filter(|l| w.find.matches(l)) {
+    for (line, at) in lines.iter().filter_map(|l| Some((l, w.find.find(l)?))) {
         let count = standing.entry(line.clone()).or_default();
         *count += 1;
         if *count > w.seen.get(line).copied().unwrap_or_default() {
-            let told = line[..line.floor_char_boundary(MAX_LINE)].to_string();
+            let (told, cut) = excerpt(line, at);
             w.pending_bytes += told.len();
-            w.pending.push_back((told, fresh));
+            w.pending.push_back((told, fresh, cut));
         }
     }
     w.seen = standing;
@@ -271,7 +286,7 @@ fn observe(w: &mut Watch, lines: &[String]) {
 /// always stays, so a loss always has a row to be told with.
 fn trim(w: &mut Watch) {
     while w.pending.len() > 1 && (w.pending.len() > MAX_PENDING || w.pending_bytes > MAX_PENDING_BYTES) {
-        let (gone, _) = w.pending.pop_front().expect("over a limit, so not empty");
+        let (gone, ..) = w.pending.pop_front().expect("over a limit, so not empty");
         w.pending_bytes -= gone.len();
         w.lost += 1;
     }
@@ -286,17 +301,20 @@ fn tell(watches: &mut [Watch], turn: usize, budget: &mut Budget) -> Vec<Value> {
         let mut told = false;
         for k in 0..count {
             let w = &mut watches[(turn + k) % count];
-            let Some((line, fresh)) = w.pending.front() else { continue };
+            let Some((line, fresh, cut)) = w.pending.front() else { continue };
             if !budget.take(w.id.len() + line.len() + 128) {
                 return events;
             }
             let mut data = json!({"watch": w.id, "line": line, "fresh": fresh});
+            if *cut {
+                data["cut"] = true.into();
+            }
             // Rows dropped before this one ride on it rather than take a turn of their own.
             if w.lost > 0 {
                 data["lost"] = std::mem::take(&mut w.lost).into();
             }
             events.push(json!({"type": "output", "terminal": crate::terminals::address(w.terminal), "data": data}));
-            let (line, _) = w.pending.pop_front().expect("its front was just read");
+            let (line, ..) = w.pending.pop_front().expect("its front was just read");
             w.pending_bytes -= line.len();
             told = true;
         }
@@ -317,7 +335,7 @@ mod tests {
     #[test]
     fn a_regex_reads_digits_and_words_as_unicode_does() {
         let w = compile(&[watch(OutputMatch::Regex(r"^\d+ failed$".into()), 40)], |_| Ok(1), |_| false).unwrap();
-        assert!(w[0].find.matches("٣ failed") && !w[0].find.matches("x failed"));
+        assert!(w[0].find.find("٣ failed").is_some() && w[0].find.find("x failed").is_none());
     }
 
     #[test]
@@ -410,8 +428,25 @@ mod tests {
         observe(&mut ws[1], &lines(&["server FAIL"]));
         let events = tell(&mut ws, 0, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
         let line = events[0]["data"]["line"].as_str().unwrap();
-        assert!(line.len() <= MAX_LINE && huge.starts_with(line));
+        assert!(line.len() <= MAX_LINE + 3 && huge.starts_with(line) && events[0]["data"]["cut"] == true);
         assert_eq!(events[1]["data"]["line"], "server FAIL", "the other watch is not held up");
+    }
+
+    #[test]
+    fn a_cut_row_keeps_what_matched() {
+        let mut w = [compile(&[watch(OutputMatch::Regex(r"http://localhost:\d+".into()), 40)], |_| Ok(1), |_| false)
+            .unwrap()
+            .remove(0)];
+        let log = format!("{} listening on http://localhost:5173 {}", "x".repeat(70_000), "y".repeat(70_000));
+        observe(&mut w[0], &lines(&[&log, "short http://localhost:3000"]));
+        let events = tell(&mut w, 0, &mut Budget { events: 9, bytes: 1 << 20 });
+        let first = &events[0]["data"];
+        assert!(first["line"].as_str().unwrap().contains("http://localhost:5173") && first["cut"] == true);
+        assert!(first["line"].as_str().unwrap().len() <= MAX_LINE + 3);
+        assert_eq!(
+            (&events[1]["data"]["line"], events[1]["data"].get("cut")),
+            (&json!("short http://localhost:3000"), None)
+        );
     }
 
     #[test]

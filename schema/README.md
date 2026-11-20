@@ -146,7 +146,7 @@ Each event's `data`, and how to apply it to a snapshot:
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
 | `foreground` | `{pid, name, argv, cwd}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
-| `output` | `{watch, line, fresh, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
+| `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
 
 `events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`
 watches terminals here (not `machine/t7`: subscribe to that machine's core). Each
@@ -159,7 +159,8 @@ They are read four times a second, so a row that passes through faster may be
 missed. Rows seen wait in their watch's queue and are told one at a time from
 each watch in turn, at most 256 (1 MB) a look; past 1000 rows or 64 KB still
 waiting after a look, a watch drops its oldest (never its newest) and its next row
-carries `lost`. A row over 64 KB is told cut to its first 64 KB. A terminal that
+carries `lost`. A row over 64 KB is told as the 64 KB around what matched (from
+its start when the match is longer), with `cut`. A terminal that
 finished, or a kept one between shells, is looked at in the screen it left; one
 removed meanwhile (`--rm`) is not. Output
 events go only to the subscription that set the watches, whatever its
