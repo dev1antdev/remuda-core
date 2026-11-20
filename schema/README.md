@@ -118,6 +118,34 @@ When the program ends, the core sends CLOSE with
 `{"reason":"exited","exit_code":0,"signal":null}` (`reason` as in the
 terminal record: exited, killed, server_stop, ...).
 
+## Call options newer cores add
+
+`foreground: <pid>` on `terminal.send` types only while that process group leads
+the terminal (the `pid` of its `foreground`, the core's own pick on Windows, where
+a pseudo console has no foreground group: check its `name` is the program you
+mean). Refused as `status_mismatch` when the core's last look already saw another,
+then looked at afresh before the paste (`status_mismatch`: nothing typed) and again
+before Enter (`not_submitted`: the text may have reached the terminal and the send
+held back its own Enter, though a key a person pressed meanwhile still goes, so read
+the terminal before sending again). Each look is the holder's answer to that very
+request, never an earlier sample; a terminal still run by a holder from before
+this release (one kept across `rc update`) cannot promise that, so a send naming
+`foreground` there is refused as `needs_update` and types nothing. It narrows, it cannot close: between a look and the
+write, and for a program that stops reading while still in front, what was typed
+goes to whatever reads the terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
+refuses the field towards a core that does not (`needs_update`). Clients send it
+only to a core that lists it: an older core ignores it and types whatever is in
+front. The CLI has no flag for it.
+
+`literal: true` on `terminal.run` starts `argv` as it is: no template is looked up
+by its first word and no first message is sent, so a program named like a template
+runs itself, and a missing one is `spawn_failed`. It needs `argv`: with `line`, or
+with neither, it is `invalid_params`. Cores advertise `run_literal` in
+`hello.features`; a relay refuses the field towards a core that does not
+(`needs_update`). Clients send it only to a core that lists it: an older core
+ignores it and may start a template in the program's place. The CLI has no flag
+for it.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,
@@ -169,32 +197,6 @@ behind are not told again after `missed`: subscribe again to hear the rows that
 stand. Cores advertise `output_watches` in `hello.features`; clients send
 `output` only to a core that lists it, since an older core accepts the field
 and never tells.
-
-`foreground: <pid>` on `terminal.send` types only while that process group leads
-the terminal (the `pid` of its `foreground`, the core's own pick on Windows, where
-a pseudo console has no foreground group: check its `name` is the program you
-mean). Refused as `status_mismatch` when the core's last look already saw another,
-then looked at afresh before the paste (`status_mismatch`: nothing typed) and again
-before Enter (`not_submitted`: the text may have reached the terminal and the send
-held back its own Enter, though a key a person pressed meanwhile still goes, so read
-the terminal before sending again). Each look is the holder's answer to that very
-request, never an earlier sample; a terminal still run by a holder from before
-this release (one kept across `rc update`) cannot promise that, so a send naming
-`foreground` there is refused as `needs_update` and types nothing. It narrows, it cannot close: between a look and the
-write, and for a program that stops reading while still in front, what was typed
-goes to whatever reads the terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
-refuses the field towards a core that does not (`needs_update`). Clients send it
-only to a core that lists it: an older core ignores it and types whatever is in
-front. The CLI has no flag for it.
-
-`literal: true` on `terminal.run` starts `argv` as it is: no template is looked up
-by its first word and no first message is sent, so a program named like a template
-runs itself, and a missing one is `spawn_failed`. It needs `argv`: with `line`, or
-with neither, it is `invalid_params`. Cores advertise `run_literal` in
-`hello.features`; a relay refuses the field towards a core that does not
-(`needs_update`). Clients send it only to a core that lists it: an older core
-ignores it and may start a template in the program's place. The CLI has no flag
-for it.
 
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,
