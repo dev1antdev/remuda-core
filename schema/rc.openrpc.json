@@ -902,6 +902,11 @@
             },
             "type": "object"
           },
+          "literal": {
+            "default": false,
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.",
+            "type": "boolean"
+          },
           "name": {
             "type": [
               "string",
@@ -1389,6 +1394,11 @@
               "type": "string"
             },
             "type": "object"
+          },
+          "literal": {
+            "default": false,
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.",
+            "type": "boolean"
           },
           "name": {
             "type": [

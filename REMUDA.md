@@ -41,7 +41,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
   `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`, `terminal.run`'s
-  `literal`).
+  `literal` and the record's).
 
 ## Keeping upstream's fixes applying
 
@@ -147,6 +147,14 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `needs_update` error and the feature in `api.rs`, a paragraph in `schema/README.md` under a section
   of its own, "Call options newer cores add", before Events (the `foreground` paragraph moved there
   too), the generated schema; the end-to-end tests are ours, in `tests/remuda.rs`.
+- A terminal's record carries `literal` (`literal_record` in hello's features): true while it runs
+  what a `literal` run started, false for any other run and once keep gave it this machine's shell
+  in place of that program, so remuda tells a scene pane's command (a shell's `sh -c '…'` too) from
+  the shell a reboot gives that pane, whatever their argv. In upstream's files the field in
+  `terminals.rs`'s `Terminal` and `NewTerminal` with its line in `Registry::create`,
+  `literal: p.literal` in `api/run.rs`, its reset beside `template` in `kept.rs`'s replacement,
+  the feature in `api.rs`, a paragraph in `schema/README.md`, the generated schema; the tests are
+  ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

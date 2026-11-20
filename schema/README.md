@@ -148,6 +148,14 @@ a core; a core that added this one is never asked to run (`machine_unknown`). Cl
 a core that lists it: an older core ignores it and may start a template in the
 program's place. The CLI has no flag for it.
 
+A terminal's record carries `literal`: true while it runs the program a
+`literal: true` run started, false for any other run and once `keep` has given it
+this machine's shell in place of that program. So a client can tell a program it
+started as it is, a shell's `sh -c '…'` among them, from the shell that later
+took its place, whatever their argv. Cores advertise `literal_record` in
+`hello.features`; an older core's record has no `literal`, and a record relayed
+from an added machine is that core's own.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,

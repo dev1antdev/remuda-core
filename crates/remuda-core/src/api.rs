@@ -26,6 +26,7 @@ pub const FEATURES: &[&str] = &[
     "output_watches",
     "send_foreground",
     "run_literal",
+    "literal_record",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.

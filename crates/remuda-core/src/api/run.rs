@@ -155,6 +155,7 @@ pub(super) async fn start(
             notify: !p.no_notify,
             rm: p.rm,
             keep: p.keep,
+            literal: p.literal,
             name: p.name,
             labels: labels(&p.labels),
             argv: p.argv.clone(),

@@ -118,6 +118,9 @@ pub struct Terminal {
     /// The template that started it.
     #[serde(default)]
     pub template: Option<String>,
+    /// Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.
+    #[serde(default)]
+    pub literal: bool,
     /// A template first message that was not sent; retained for later inspection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_message: Option<crate::templates::FirstMessage>,
@@ -226,6 +229,7 @@ pub struct NewTerminal {
     pub die_with_parent: bool,
     pub rm: bool,
     pub keep: bool,
+    pub literal: bool,
     pub name: Option<String>,
     pub labels: BTreeMap<String, String>,
     pub argv: Vec<String>,
@@ -309,6 +313,7 @@ impl Registry {
                 foreground: None,
                 afar: Default::default(),
                 template: new.template.map(|t| t.name),
+                literal: new.literal,
                 first_message: None,
                 holder: None,
             },

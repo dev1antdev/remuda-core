@@ -100,6 +100,7 @@ impl Core {
             t.argv = shell.clone();
             t.cwd = cwd.clone();
             t.template = None;
+            t.literal = false;
             t.reported = false;
             t.title.clear();
             t.full_screen = false;

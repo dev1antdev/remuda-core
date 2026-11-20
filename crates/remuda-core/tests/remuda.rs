@@ -307,3 +307,28 @@ fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
         assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");
     }
 }
+
+#[test]
+fn a_terminals_record_says_whether_it_was_run_literally() {
+    let s = session("0");
+    let literal = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true}));
+    assert_eq!(literal["result"]["literal"], true, "{literal}");
+    assert_eq!(get(&s, literal["result"]["address"].as_str().unwrap())["literal"], true);
+    let plain = run_api(&s, json!({"argv": ["sleep", "100"]}));
+    assert_eq!(plain["result"]["literal"], false, "{plain}");
+}
+
+#[test]
+fn the_shell_keep_gives_a_lost_literal_run_is_not_literal() {
+    let s = session("0");
+    let reply = run_api(&s, json!({"argv": ["sleep", "100"], "literal": true, "keep": true}));
+    let t = reply["result"]["address"].as_str().unwrap().to_string();
+    let old = get(&s, &t)["pid"].as_i64().unwrap();
+    let holder = s.json(&["server", "status"])["holder"]["pid"].as_i64().unwrap();
+    unsafe { libc::kill(holder as i32, libc::SIGKILL) };
+    wait_until("replacement shell", || {
+        let r = get(&s, &t);
+        r["state"] == "live" && r["pid"].as_i64().is_some_and(|p| p != old)
+    });
+    assert_eq!(get(&s, &t)["literal"], false);
+}
