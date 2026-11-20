@@ -409,3 +409,16 @@ fn a_literal_run_stays_literal_until_keeps_shell_has_started() {
     wait_until_for("keep's shell", Duration::from_secs(30), || get(&s, &t)["pid"].is_number());
     assert_eq!(get(&s, &t)["literal"], false);
 }
+
+#[test]
+fn a_record_a_core_before_literal_record_wrote_says_nothing_of_literal() {
+    let s = session("0");
+    run_api(&s, json!({"argv": ["sleep", "100"], "literal": true}));
+    let state = std::fs::read_to_string(s.root.join("state/remuda-core/test/terminals.json")).unwrap();
+    let mut record = serde_json::from_str::<serde_json::Value>(&state).unwrap()["terminals"]["1"].take();
+    assert_eq!(record["literal"], true, "{record}");
+    record.as_object_mut().unwrap().remove("literal"); // as a core without the feature saves it
+    let loaded: remuda_core::terminals::Terminal = serde_json::from_value(record).unwrap();
+    let public = serde_json::to_value(remuda_core::terminals::Public(loaded)).unwrap();
+    assert!(public.get("literal").is_none(), "unknown, not false: {public}");
+}

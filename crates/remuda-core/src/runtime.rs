@@ -710,7 +710,7 @@ impl Core {
             (Ok(pid), Some(t)) if t.is_live() => {
                 let restarted = t.reason.is_some();
                 if t.reason.as_deref().is_some_and(|r| r != "spawn_pending") {
-                    t.literal = false; // keep's shell has started in place of a lost program: no literal run
+                    t.literal = Some(false); // keep's shell has started in place of a lost program: no literal run
                 }
                 t.pid = Some(pid);
                 t.program_started_ms = Some(now_ms());

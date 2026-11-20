@@ -907,9 +907,11 @@
             "type": "object"
           },
           "literal": {
-            "default": false,
-            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.",
-            "type": "boolean"
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.\nAbsent for a record a core without `literal_record` wrote, though this one loaded it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": [
@@ -1400,9 +1402,11 @@
             "type": "object"
           },
           "literal": {
-            "default": false,
-            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.",
-            "type": "boolean"
+            "description": "Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.\nAbsent for a record a core without `literal_record` wrote, though this one loaded it.",
+            "type": [
+              "boolean",
+              "null"
+            ]
           },
           "name": {
             "type": [

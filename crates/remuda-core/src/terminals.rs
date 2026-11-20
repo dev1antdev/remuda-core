@@ -119,8 +119,9 @@ pub struct Terminal {
     #[serde(default)]
     pub template: Option<String>,
     /// Started as it is (`terminal.run`'s `literal`), no template looked up: its own program, not one keep gave it.
-    #[serde(default)]
-    pub literal: bool,
+    /// Absent for a record a core without `literal_record` wrote, though this one loaded it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub literal: Option<bool>,
     /// A template first message that was not sent; retained for later inspection.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub first_message: Option<crate::templates::FirstMessage>,
@@ -313,7 +314,7 @@ impl Registry {
                 foreground: None,
                 afar: Default::default(),
                 template: new.template.map(|t| t.name),
-                literal: new.literal,
+                literal: Some(new.literal),
                 first_message: None,
                 holder: None,
             },

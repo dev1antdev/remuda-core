@@ -165,9 +165,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   a `literal` run started, false for any other and once keep's shell has started in place of that
   program (true still while it waits for that shell, through a failed replacement, or has finished:
   `pid` and `reason` say whether anything runs), so remuda tells a scene pane's command (a shell's
-  `sh -c '…'` too) from the shell a reboot gives that pane, whatever their argv; a terminal a core
-  without the feature started reads false once an update adopts it, so remuda runs `literal` only
-  on a core with both features. In upstream's files the field in `terminals.rs`'s `Terminal` and
+  `sh -c '…'` too) from the shell a reboot gives that pane, whatever their argv; a record a core
+  without the feature wrote has none, also once an update adopts it (unknown, never false), so
+  remuda runs `literal` only on a core with both features and reads a missing one as unknown. In upstream's files the field in `terminals.rs`'s `Terminal` and
   `NewTerminal` with its line in `Registry::create`, `literal: p.literal` in `api/run.rs`, its
   reset in `runtime.rs`'s `spawn_result` for a spawn ending a loss (a `reason` other than
   `spawn_pending`, the adoption after a core crash included), the feature in `api.rs`, a paragraph

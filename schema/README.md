@@ -243,11 +243,12 @@ waits for that shell (`pid` null, a `reason` set), through replacements that
 fail, and once it has finished, though nothing runs then: read `pid` and
 `reason` with it. So a client tells the program it started as it is, a shell's
 `sh -c '…'` among them, from the shell keep later gave the terminal, whatever
-their argv. Cores advertise `literal_record` in `hello.features`. An older
-core's record has no `literal`, and a terminal it started reads false once an
-update adopts it, so a client runs `literal` only on a core that lists both
-`run_literal` and `literal_record`; a record relayed from an added machine is
-that core's own.
+their argv. Cores advertise `literal_record` in `hello.features`. A record a
+core without it wrote has no `literal`, and keeps none when an update adopts
+the terminal (a rollback and an update again included): unknown, not false.
+So a client runs `literal` only on a core that lists both `run_literal` and
+`literal_record`, and reads a missing `literal` as unknown; a record relayed
+from an added machine is that core's own.
 
 An initial spawn that times out remains claimed with `reason: "spawn_pending"`;
 input/attach are unavailable until the holder answers. It may already be running,
