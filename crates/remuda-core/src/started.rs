@@ -1,34 +1,32 @@
 //! When a process was created, as the OS records it: what tells a process from a later one given the same pid.
-//! Unix milliseconds, a floor: read as `ps -o lstart` reads it on Unix (its second is that one's; on Linux the boot
-//! time now plus the start since boot, so a step of the clock moves it as it moves ps's) and from the creation
-//! FILETIME on Windows.
+//! Unix milliseconds, a floor: on macOS the start `ps -o lstart` prints, on Linux the start since boot (to the kernel's
+//! tick) after the boot time the clocks tell, so its second is ps's or the next (ps counts the boot time in whole
+//! seconds) and a step of the clock moves it as it moves ps's, and on Windows the creation FILETIME.
 
 use crate::foreground::Foreground;
+use crate::runtime::Core;
 
-/// The facts about `pid` in front of the terminal whose program is `root`, with its creation, read before and after
-/// them: a pid that changed hands meanwhile — to a later process, or on Unix to a process of another terminal's
-/// session — tells nothing this look, rather than another process's facts as this terminal's.
-pub fn about(pid: i32, root: Option<u32>) -> Option<Foreground> {
+impl Core {
+    /// What is in front of terminal `id`: the facts and the creation of the process group its holder names, read
+    /// between two of its answers that name the same group, the creation read before and after the facts. A process
+    /// that left meanwhile, and with it a pid given to a process of another terminal, tells nothing this look.
+    pub(crate) async fn foreground_now(&self, id: u32) -> Option<Foreground> {
+        let pgid = self.foreground(id).await;
+        if pgid <= 0 {
+            return None;
+        }
+        let facts = about(pgid)?;
+        (self.foreground(id).await == pgid).then_some(facts)
+    }
+}
+
+/// The facts about `pid` with its creation, read before and after them: a pid that changed hands meanwhile tells
+/// nothing, rather than one process's name with another's start.
+pub fn about(pid: i32) -> Option<Foreground> {
     let before = of(pid);
     let facts = crate::foreground::about(pid)?;
-    let ours = in_session(pid, root);
     let after = of(pid);
-    (ours && before == after).then_some(Foreground { started_ms: after, ..facts })
-}
-
-/// Whether `pid` is in the session of the terminal whose program is `root`: on Unix a terminal is its program's
-/// session's, which every process in front of it is in. Unchecked where there is nothing to ask: on Windows, where the
-/// core picks the program from the terminal's own, and while the terminal waits for a program.
-#[cfg(unix)]
-fn in_session(pid: i32, root: Option<u32>) -> bool {
-    let Some(root) = root else { return true };
-    let session = unsafe { libc::getsid(pid) };
-    session > 0 && session == unsafe { libc::getsid(root as i32) }
-}
-
-#[cfg(windows)]
-fn in_session(_: i32, _: Option<u32>) -> bool {
-    true
+    (before == after).then_some(Foreground { started_ms: after, ..facts })
 }
 
 /// The process's creation in unix ms, if it is still there to read.
@@ -37,15 +35,32 @@ pub fn of(pid: i32) -> Option<u64> {
     let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
     // after the name in brackets (which may hold spaces and brackets), field 3 on: starttime is field 22
     let ticks: u64 = stat.get(stat.rfind(')')? + 2..)?.split(' ').nth(19)?.parse().ok()?;
-    let btime: u64 = std::fs::read_to_string("/proc/stat")
-        .ok()?
-        .lines()
-        .find_map(|l| l.strip_prefix("btime "))?
-        .trim()
-        .parse()
-        .ok()?;
     let hz = unsafe { libc::sysconf(libc::_SC_CLK_TCK) };
-    (hz > 0).then(|| btime * 1000 + ticks * 1000 / hz as u64)
+    if hz <= 0 {
+        return None;
+    }
+    Some(boot_ms()? + ticks * 1000 / hz as u64)
+}
+
+/// When this machine booted, unix ms: the real clock less the time since boot, which `/proc/stat` gives in whole
+/// seconds alone. Kept until the real clock steps (by over `STEP_MS`), so a reading's jitter moves no creation.
+#[cfg(target_os = "linux")]
+fn boot_ms() -> Option<u64> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    const STEP_MS: u64 = 50;
+    static KEPT: AtomicU64 = AtomicU64::new(0);
+    let clock = |id| {
+        let mut t: libc::timespec = unsafe { std::mem::zeroed() };
+        (unsafe { libc::clock_gettime(id, &mut t) } == 0)
+            .then(|| t.tv_sec as i128 * 1000 + t.tv_nsec as i128 / 1_000_000)
+    };
+    let now = u64::try_from(clock(libc::CLOCK_REALTIME)? - clock(libc::CLOCK_BOOTTIME)?).ok()?;
+    let kept = KEPT.load(Ordering::Relaxed);
+    if kept != 0 && now.abs_diff(kept) <= STEP_MS {
+        return Some(kept);
+    }
+    KEPT.store(now, Ordering::Relaxed);
+    Some(now)
 }
 
 #[cfg(target_os = "macos")]
@@ -91,23 +106,6 @@ mod tests {
         assert!(started <= now && started > now - 3_600_000, "started {started}, now {now}");
         assert_eq!(super::of(pid), Some(started));
         assert_eq!(super::of(i32::MAX), None);
-        assert_eq!(super::about(pid, Some(pid as u32)).and_then(|f| f.started_ms), Some(started));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_process_of_another_terminals_session_is_not_in_front_of_this_one() {
-        use std::os::unix::process::CommandExt;
-        let mut other = std::process::Command::new("sleep");
-        other.arg("30");
-        unsafe { other.pre_exec(|| if libc::setsid() < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }) };
-        let mut other = other.spawn().unwrap();
-        let elsewhere = other.id();
-        let pid = std::process::id() as i32;
-        assert!(super::about(pid, Some(elsewhere)).is_none(), "a pid read as in front of another session's terminal");
-        assert!(super::about(elsewhere as i32, Some(elsewhere)).is_some());
-        assert!(super::about(pid, None).is_some(), "a terminal waiting for a program checks nothing");
-        let _ = other.kill();
-        let _ = other.wait();
+        assert_eq!(super::about(pid).and_then(|f| f.started_ms), Some(started));
     }
 }

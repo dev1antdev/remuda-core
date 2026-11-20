@@ -461,12 +461,16 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     let t = run(&s, &["sh"]);
     let shell = get(&s, &t)["pid"].as_i64().unwrap();
     wait_until("the shell in front", || in_front(&s, &t) == shell);
+    let sent = remuda_core::runtime::now_ms() as i64;
     s.json(&["send", &t, "sleep 30"]);
     wait_until("sleep in front", || ![0, shell].contains(&in_front(&s, &t)));
     let front = get(&s, &t)["foreground"].clone();
     let sleep = front["pid"].as_i64().unwrap();
     let started = front["started_ms"].as_i64().unwrap_or_else(|| panic!("no started_ms in {front}"));
-    assert_eq!(started.div_euclid(1000), lstart(sleep), "{front}");
+    // ps's second, or on Linux the next: ps counts the boot time in whole seconds
+    let second = started.div_euclid(1000);
+    assert!(second == lstart(sleep) || cfg!(target_os = "linux") && second == lstart(sleep) + 1, "{front}");
+    assert!(started >= sent - 20, "the creation to the kernel's tick: sent at {sent}, {front}");
     let shell_started = {
         unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
         wait_until("the shell in front again", || in_front(&s, &t) == shell);

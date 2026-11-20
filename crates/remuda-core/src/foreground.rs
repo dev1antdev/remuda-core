@@ -164,11 +164,9 @@ impl Core {
         let ms = std::env::var("RC_FOREGROUND_MS").ok().and_then(|v| v.parse().ok()).unwrap_or(500);
         loop {
             tokio::time::sleep(Duration::from_millis(ms)).await;
-            let live: Vec<(u32, Option<u32>)> =
-                self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| (t.id(), t.pid)).collect();
-            for (id, root) in live {
-                let pgid = self.foreground(id).await;
-                let now = (pgid > 0).then(|| crate::started::about(pgid, root)).flatten();
+            let live: Vec<u32> = self.lock().reg.terminals.values().filter(|t| t.is_live()).map(|t| t.id()).collect();
+            for id in live {
+                let now = self.foreground_now(id).await;
                 let mut st = self.lock();
                 let Some(t) = st.reg.terminals.get_mut(&id).filter(|t| t.is_live()) else {
                     continue;

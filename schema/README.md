@@ -164,11 +164,12 @@ update, when the core that would type does not list the feature: read
 ## Fields newer cores add
 
 `started_ms` in a terminal's `foreground` is when that process was created, unix
-milliseconds, as the OS records it, a floor: on Unix the start `ps -o lstart`
-prints, so compare its second (on Linux it is the boot time now plus the start
-since boot, as ps reckons it: a step of the wall clock moves both alike, and the
-core tells each terminal's foreground again once), on Windows the creation
-FILETIME. It tells the process in front from a later one given the same pid, so a
+milliseconds, as the OS records it, a floor: on macOS the start `ps -o lstart`
+prints; on Linux the start since boot, to the kernel's tick, after the boot time
+the clocks tell, so its second is `ps -o lstart`'s or the next (ps counts the
+boot time in whole seconds), and a step of the wall clock moves it as it moves
+ps's (the core tells each terminal's foreground again once); on Windows the
+creation FILETIME. It tells the process in front from a later one given the same pid, so a
 client that reads a process itself (its session files, say) can check that it
 read the one the core saw: a start that differs is another process, or one it
 cannot tell, never the same. A second alone does not tell two processes that
@@ -176,12 +177,10 @@ took one pid within it apart, so a client also checks a finer time the process
 records itself when it has one (Claude Code's `startedAt`, in ms, is never
 before `started_ms`); on Linux a program's own record of its start does not
 follow a step of the clock as `started_ms` and `ps` do, so after a step such a
-check cannot tell, which reads as no match. The start is read before and after
-the rest of the foreground, and on Unix that process must be in the session of
-the terminal's own program (every process in front of a terminal is): a look
-where the start moved, or that found a process of another terminal under the pid,
-tells no foreground. On Windows, where the core picks the program from the
-terminal's own processes, the pick and the read are a moment apart. Cores advertise `foreground_started` in `hello.features`; a
+check cannot tell, which reads as no match. The process is read between two of
+the terminal's own answers naming it in front, its start before and after the
+rest: a look where the start moved, or the terminal named another (the process
+left, and its pid may now be another terminal's), tells no foreground. Cores advertise `foreground_started` in `hello.features`; a
 terminal relayed from an added machine carries its own core's foreground, so a
 missing `started_ms` means unknown for that terminal (an older core there, or an
 OS that would not tell), whatever the first core's hello said.
