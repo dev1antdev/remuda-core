@@ -684,6 +684,76 @@
         ],
         "type": "object"
       },
+      "OutputMatch": {
+        "description": "What a row must hold: a piece of text, or a match of a regular expression\n(Rust's `regex` syntax, `\\d` and `\\w` Unicode's).",
+        "oneOf": [
+          {
+            "properties": {
+              "type": {
+                "const": "substring",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 4096,
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "regex",
+                "type": "string"
+              },
+              "value": {
+                "maxLength": 4096,
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "value"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OutputWatch": {
+        "description": "A watch on a terminal's last rows.",
+        "properties": {
+          "id": {
+            "description": "Named in each `output` event (at most 256 bytes).",
+            "maxLength": 256,
+            "type": "string"
+          },
+          "lines": {
+            "default": 40,
+            "description": "How many of its last rows it looks at, 1 to 200 (default 40).",
+            "format": "uint",
+            "maximum": 200,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "match": {
+            "$ref": "#/components/schemas/OutputMatch"
+          },
+          "terminal": {
+            "description": "A terminal here (`t7` or a name); for another machine's, subscribe to its core.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "terminal",
+          "match"
+        ],
+        "type": "object"
+      },
       "PutResult": {
         "properties": {
           "bytes": {
@@ -3670,7 +3740,7 @@
       }
     },
     {
-      "description": "Snapshot of matching terminals, then every fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind.",
+      "description": "Snapshot of matching terminals, then every fact change in order (created, lost, restarted, keep, finished, removed, status, turn, title, labels, size, doc, and output for `output` watches) as `event` notifications, `heartbeat` every 15 s, and `missed` + fresh snapshot for a subscriber that fell behind.",
       "errors": [
         {
           "code": -32000,
@@ -3685,6 +3755,20 @@
             "kind": "machine_unknown"
           },
           "message": "machine_unknown"
+        },
+        {
+          "code": -32602,
+          "data": {
+            "kind": "invalid_params"
+          },
+          "message": "invalid_params"
+        },
+        {
+          "code": -32000,
+          "data": {
+            "kind": "invalid_regex"
+          },
+          "message": "invalid_regex"
         }
       ],
       "name": "events.subscribe",
@@ -3713,6 +3797,20 @@
             "default": {},
             "description": "Only terminals carrying all of these labels (repeatable).",
             "type": "object"
+          }
+        },
+        {
+          "description": "Watches on terminals here: each row that comes into a watch's last rows\nmatching it is an `output` event (`fresh` for the rows already there).",
+          "name": "output",
+          "required": false,
+          "schema": {
+            "default": [],
+            "description": "Watches on terminals here: each row that comes into a watch's last rows\nmatching it is an `output` event (`fresh` for the rows already there).",
+            "items": {
+              "$ref": "#/components/schemas/OutputWatch"
+            },
+            "maxItems": 256,
+            "type": "array"
           }
         },
         {

@@ -146,6 +146,29 @@ Each event's `data`, and how to apply it to a snapshot:
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
 | `foreground` | `{pid, name, argv, cwd}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
+| `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
+
+`events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`
+watches terminals here (not `machine/t7`: subscribe to that machine's core). Each
+row of a terminal's last `lines` (default 40; trailing blank rows of the screen
+left out, history above it on the main screen) that matches a watch is told once
+while it stands there, and again if it comes back; a regex is Rust's `regex`
+syntax, `\d` and `\w` Unicode's. At most 256 watches, 1 to 200 rows, 4 KB a
+pattern, 256 bytes an id; an invalid regex is `invalid_regex`, naming the watch.
+They are read four times a second, so a row that passes through faster may be
+missed. Rows seen wait in their watch's queue and are told one at a time from
+each watch in turn, at most 256 (1 MB) a look; past 1000 rows or 64 KB still
+waiting after a look, a watch drops its oldest (never its newest) and its next row
+carries `lost`. A row over 64 KB is told as the 64 KB around what matched (from
+its start when the match is longer), with `cut`. A terminal that
+finished, or a kept one between shells, is looked at in the screen it left; one
+removed meanwhile (`--rm`) is not. Output
+events go only to the subscription that set the watches, whatever its
+`terminal`, `children_of` or label filter. Rows told while a subscriber was
+behind are not told again after `missed`: subscribe again to hear the rows that
+stand. Cores advertise `output_watches` in `hello.features`; clients send
+`output` only to a core that lists it, since an older core accepts the field
+and never tells.
 
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,

@@ -6,6 +6,8 @@ use crate::{Terminal, ffi};
 use std::ffi::c_void;
 
 const RESET: &str = "\x1b[0m";
+/// Grid rows counted from the oldest kept, history then screen.
+const SCREEN: i32 = 2;
 const WIDE: i32 = 3;
 const SPACER_TAIL: i32 = 2;
 const CONTENT_TAG: i32 = 2;
@@ -77,6 +79,23 @@ impl Terminal {
         let cols = self.size().0;
         let available = if self.alt_screen() { 0 } else { self.history_rows() };
         (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
+    }
+
+    /// The text of the last `n` rows (the screen down to its last row with text,
+    /// then history above it on the main screen), oldest first, as `plain_text`
+    /// reads it: soft-wrapped rows joined, trailing spaces cut.
+    pub fn recent_rows(&self, n: usize) -> Vec<String> {
+        let shown = self.screen_rows().iter().rposition(|r| !r.trim().is_empty()).map_or(0, |i| i + 1);
+        let above = if self.alt_screen() { 0 } else { self.history_rows() };
+        let bottom = above + shown as u32;
+        let top = bottom.saturating_sub(u32::try_from(n).unwrap_or(u32::MAX));
+        if top == bottom {
+            return Vec::new();
+        }
+        let last = self.size().0.saturating_sub(1);
+        let Some(window) = self.select(SCREEN, (0, top), (last, bottom - 1)) else { return Vec::new() };
+        let text = self.format_with(ffi::FORMAT_PLAIN, Some(&window), false, true);
+        String::from_utf8_lossy(&text).split('\n').map(str::to_string).collect()
     }
 
     fn styled_row(&self, tag: i32, y: u32, cols: u16) -> String {
@@ -248,6 +267,24 @@ mod tests {
         let mut t = Terminal::new(8, 1, 1 << 20);
         t.write("a界b".as_bytes());
         assert_eq!(plain(&t.styled_screen()[0]), "a界b");
+    }
+
+    #[test]
+    fn recent_rows_end_at_the_last_text_and_reach_into_history() {
+        let mut t = Terminal::new(20, 4, 1 << 20);
+        t.write(b"\x1b[32mone\r\ntwo  \r\nthree\r\nfour\r\nfive\r\n");
+        assert_eq!(t.recent_rows(2), ["four", "five"]);
+        assert_eq!(t.recent_rows(4), ["two", "three", "four", "five"], "history above the screen, spaces cut");
+        assert_eq!(t.recent_rows(9), ["one", "two", "three", "four", "five"]);
+        t.write(b"\x1b[?1049h\x1b[Hfull");
+        assert_eq!(t.recent_rows(9), ["full"], "a full-screen program: its screen alone");
+    }
+
+    #[test]
+    fn a_wrapped_line_is_one_recent_row() {
+        let mut t = Terminal::new(10, 4, 1 << 20);
+        t.write(b"first\r\nabcdefghijklmnopqrstuvwxyz");
+        assert_eq!(t.recent_rows(4), ["first", "abcdefghijklmnopqrstuvwxyz"]);
     }
 
     #[test]

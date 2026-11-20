@@ -40,7 +40,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
-  `format`).
+  `format`, `events.subscribe`'s `output`).
 
 ## Keeping upstream's fixes applying
 
@@ -90,6 +90,23 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   ours, in `tests/remuda.rs`. A core
   older than this on an added machine ignores `format` and answers plain text (no row starts with
   `ESC[0m`).
+- `events.subscribe` takes `output` watches (`output_watches` in hello's features): each row that
+  comes into a watch's last rows of a terminal here matching its substring or regex (the `regex`
+  crate, Unicode `\d` and `\w`) is an `output` event, the rows already there `fresh`; at most 256
+  watches, 1 to 200 rows, 4 KB a pattern, 256 bytes an id; rows seen wait in their watch's queue
+  and are told in turn across watches, 256 events (1 MB) a look; what still waits past 1000 rows
+  or 64 KB loses its oldest (never its newest), counted as `lost` on the next row told; a row over
+  64 KB is told as the 64 KB around what matched, with `cut`; a terminal without a live screen (finished, or kept between shells) is read from
+  its snapshot; `invalid_regex` names the
+  watch; a terminal on another machine is refused. Ours: `remuda-core/src/watches.rs` (the watches, a task per subscription
+  looking every 250 ms at the terminals that printed) and `recent_rows` in
+  `ghostty-vt/src/styled.rs` (the last rows' text with soft wraps joined, as `plain_text` reads it);
+  in upstream's files `#[derive(Clone)]` on `Sink` in `events.rs`, the param in `api/types.rs`, the compile and
+  start in `api.rs`'s `events_subscribe` with its errors, description and the feature,
+  `pub mod watches;` in `lib.rs`, `regex` in `remuda-core/Cargo.toml` and `Cargo.lock`, the
+  regenerated `THIRD-PARTY-NOTICES` and schema, the `output` row and a paragraph in
+  `schema/README.md`; the tests are ours, in `watches.rs`,
+  `styled.rs` and `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
