@@ -58,7 +58,9 @@ pub struct State {
     pub gates: HashMap<u32, crate::input::Gate>,
     pub queues: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub sends: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
-    pub foreground: HashMap<u32, Vec<oneshot::Sender<i32>>>,
+    pub foreground: crate::front::Asked,
+    /// The holders that answer a foreground lookup only on the link that asked it (`front.rs`).
+    pub own_replies: std::collections::HashSet<String>,
     /// Waits matching output: they get every byte viewers get.
     pub output_watch: HashMap<u32, Vec<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
     /// The turn of each caller's last send to a terminal, until a bare wait reports it.
@@ -418,6 +420,7 @@ impl Core {
         let (adopted, nudge) = {
             let mut st = self.lock();
             st.disconnected.remove(&welcome.instance);
+            crate::front::linked(&mut st.own_replies, &welcome);
             st.holders.push(link);
             let adopted = self.adopt(&mut st, &welcome, tails);
             self.save(&st);
@@ -585,6 +588,7 @@ impl Core {
         let Some(at) = st.holders.iter().position(|l| l.instance == instance) else { return };
         // Kept to the end: dropping it wakes a goodbye, which must find the sweep below counted.
         let link = st.holders.remove(at);
+        crate::front::link_ended(&mut st.foreground, &instance);
         let current = link.current;
         if relink {
             drop(st);
@@ -681,7 +685,7 @@ impl Core {
                 }
                 proto::FOREGROUND_IS => {
                     let pgid = proto::parse::<proto::Foreground>(&payload).map_or(-1, |f| f.pgid);
-                    for tx in st.foreground.remove(&id).unwrap_or_default() {
+                    if let Some(tx) = crate::front::answering(&mut st.foreground, id, instance) {
                         let _ = tx.send(pgid);
                     }
                 }

@@ -1019,6 +1019,9 @@ async fn forward_once(core: &Core, m: &Machine, method: &str, mut params: Value)
     let line = line(core, m).await?;
     // An older core would read no program as "nothing to run".
     let own_shell = params["argv"].as_array().is_none_or(Vec::is_empty) || params.get("line").is_some();
+    if let Some(refused) = remuda::send_foreground_refused(&line, &m.name, true, method, &params) {
+        return Err(refused);
+    }
     if method == "terminal.run" && own_shell && !line.features.iter().any(|f| f == "shell") {
         return Err(RpcError::new(
             "needs_update",
@@ -1056,6 +1059,9 @@ pub async fn forward_to(core: &Core, to: &To, method: &str, params: Value) -> Re
             let found = core.lock().peer_lines.get(id).map(|(_, l)| l.clone());
             let line = found
                 .ok_or_else(|| RpcError::new("unavailable", format!("{name} is not connected"), "try again later"))?;
+            if let Some(refused) = remuda::send_foreground_refused(&line, name, false, method, &params) {
+                return Err(refused);
+            }
             let calls_me = core.lock().peers.get(id).map(|p| p.calls_me.clone()).unwrap_or_default();
             // Reverse calls have no incoming heartbeat monitor: leave room for
             // a walked-away draft, but still bound a stuck peer. Its config may

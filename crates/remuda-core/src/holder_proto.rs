@@ -85,6 +85,9 @@ pub struct Welcome {
     pub login_session: Option<crate::platform::LoginSession>,
     #[serde(default)]
     pub draining: bool,
+    /// It answers a foreground lookup only on the link it read it from (remuda's), so a guarded send may trust it.
+    #[serde(default)]
+    pub own_replies: bool,
     /// How the previous core left: "none", "handover" or "crash".
     pub previous: String,
     pub terminals: Vec<HeldTerminal>,
