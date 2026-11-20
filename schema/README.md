@@ -148,6 +148,19 @@ a core; a core that added this one is never asked to run (`machine_unknown`). Cl
 a core that lists it: an older core ignores it and may start a template in the
 program's place. The CLI has no flag for it.
 
+`if` on `terminal.send` takes every status word a program reports (`idle`,
+`working`, `done`, `blocked`, `error`), where it took `idle` and `working` alone.
+The latest status the core has seen is looked at when the send's turn comes, after
+any draft a person is finishing, and again as the paste is written (after the look
+`foreground` asks for): another word, or none, is `status_mismatch` and nothing is
+typed, so a send for a program at rest (`done`, say) never lands in a turn a person
+started meanwhile. A program found `blocked` is still refused as `blocked` first
+unless `force`, whatever `if` names. Cores advertise `send_if_any_status` in
+`hello.features`. An older core refuses the three newer words as `invalid_params`
+and types nothing, and a relay refuses them the same way, its hint naming the
+update, when the core that would type does not list the feature: read
+`invalid_params` as an older core, whatever the first core's hello said.
+
 ## Events
 
 `events.subscribe` replies with a snapshot (`seq`, matching terminals) and,

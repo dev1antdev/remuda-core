@@ -397,9 +397,13 @@
         "type": "object"
       },
       "IdleOrWorking": {
+        "description": "A status word as a program reports it (OSC 7501).",
         "enum": [
           "idle",
-          "working"
+          "working",
+          "done",
+          "blocked",
+          "error"
         ],
         "type": "string"
       },

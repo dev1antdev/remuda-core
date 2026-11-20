@@ -1,5 +1,6 @@
 //! remuda's own (REMUDA.md): a send that types only while the program it is for leads the terminal, so an
-//! agent that left while the send waited for a person's draft never has its message run by the shell behind it.
+//! agent that left while the send waited for a person's draft never has its message run by the shell behind it; and a
+//! send naming `if` that pastes only while the status is still that word.
 
 use crate::holder_proto as proto;
 use crate::input::{Sent, Step};
@@ -60,6 +61,31 @@ pub(crate) fn guard(steps: &mut Vec<Step>, pid: i32) {
     let submit = steps.len().saturating_sub(1);
     steps.insert(submit, Step::Front { pid, pasted: true });
     steps.insert(0, Step::Front { pid, pasted: false });
+}
+
+/// A send naming `if` pastes only while the status is still that word, checked under the lock its paste is written
+/// under: the status may move after `send_message` checked it, during a foreground look or as its lock is let go.
+pub(crate) fn conditional(paste: Step, only_if: Option<&str>, force: bool) -> Step {
+    match (paste, only_if) {
+        (Step::Write(bytes), Some(want)) => Step::Paste { bytes, only_if: want.into(), force },
+        (paste, _) => paste,
+    }
+}
+
+/// The send's `if` against the status at the paste, `blocked` first unless `force`, as `send_message` checks them.
+fn still(id: u32, status: Option<&crate::status::Status>, want: &str, force: bool) -> Result<(), RpcError> {
+    let address = crate::terminals::address(id);
+    let word = status.map(|s| s.state.as_str());
+    if word == Some("blocked") && !force {
+        let kind = status.and_then(|s| s.kind.as_deref()).unwrap_or("waiting");
+        let hint = format!("typing would answer its dialog; read its screen first (rc read {address}), or --force");
+        return Err(RpcError::new("blocked", format!("{address} is blocked ({kind})"), hint));
+    }
+    if word == Some(want) {
+        return Ok(());
+    }
+    let message = format!("{address} is {}, not {want}", word.unwrap_or("silent"));
+    Err(RpcError::new("status_mismatch", message, "nothing was typed"))
 }
 
 /// Refused at once when the core's last look already saw another program in front, before the send takes the
@@ -136,6 +162,16 @@ impl Core {
         }
         if pasted { Ok(()) } else { crate::server::check_cancelled() }
     }
+
+    /// Writes a `conditional` paste, its status checked under the lock it is written under.
+    pub(crate) fn paste_if(&self, id: u32, bytes: &[u8], want: &str, force: bool) -> Result<(), RpcError> {
+        let st = self.lock();
+        still(id, st.reg.terminals.get(&id).and_then(|t| t.status.as_ref()), want, force)?;
+        if let Some(link) = st.link(id) {
+            link.input(id, bytes);
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -178,19 +214,47 @@ mod tests {
     }
 
     #[test]
-    fn the_paste_and_its_submit_each_wait_on_a_look() {
-        let mut steps =
-            vec![Step::Write(b"text".to_vec()), Step::Pause(crate::input::PASTE_GAP), Step::Write(b"\r".to_vec())];
+    fn the_paste_and_its_submit_each_wait_on_a_look_and_a_paste_naming_if_checks_it_as_it_goes() {
+        let paste = conditional(Step::Write(b"text".to_vec()), Some("done"), false);
+        let mut steps = vec![paste, Step::Pause(crate::input::PASTE_GAP), Step::Write(b"\r".to_vec())];
         guard(&mut steps, 42);
         let shape: Vec<String> = steps
             .iter()
             .map(|s| match s {
                 Step::Front { pid, pasted } => format!("front {pid} {pasted}"),
+                Step::Paste { bytes, only_if, force } => {
+                    format!("paste {} if {only_if} {force}", String::from_utf8_lossy(bytes))
+                }
                 Step::Write(b) => format!("write {}", String::from_utf8_lossy(b)),
                 Step::Pause(_) => "pause".into(),
                 _ => "other".into(),
             })
             .collect();
-        assert_eq!(shape, ["front 42 false", "write text", "pause", "front 42 true", "write \r"]);
+        assert_eq!(shape, ["front 42 false", "paste text if done false", "pause", "front 42 true", "write \r"]);
+        assert!(matches!(conditional(Step::Write(b"x".to_vec()), None, false), Step::Write(_)));
+        assert!(matches!(conditional(Step::FirstTask(b"x".to_vec()), Some("idle"), false), Step::FirstTask(_)));
+    }
+
+    #[test]
+    fn a_paste_naming_if_types_nothing_once_the_status_moved_and_blocked_comes_first() {
+        let status = |state: &str| crate::status::Status {
+            state: state.into(),
+            kind: (state == "blocked").then(|| "permission".into()),
+            progress: None,
+            app: String::new(),
+            title: String::new(),
+            msg: String::new(),
+        };
+        assert!(still(7, Some(&status("done")), "done", false).is_ok());
+        for (now, force, kind) in [
+            (Some(status("working")), false, "status_mismatch"),
+            (None, false, "status_mismatch"),
+            (Some(status("blocked")), false, "blocked"),
+            (Some(status("blocked")), true, "status_mismatch"),
+        ] {
+            let refusal = still(7, now.as_ref(), "done", force).unwrap_err();
+            assert_eq!(refusal.kind, kind, "{now:?} force {force}");
+        }
+        assert!(still(7, Some(&status("blocked")), "blocked", true).is_ok());
     }
 }

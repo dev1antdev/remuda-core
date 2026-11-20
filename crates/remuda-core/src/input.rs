@@ -261,6 +261,12 @@ pub enum Step {
         pid: i32,
         pasted: bool,
     },
+    /// The paste of a send naming `if`, written only while the status is still that word (remuda's, `front.rs`).
+    Paste {
+        bytes: Vec<u8>,
+        only_if: String,
+        force: bool,
+    },
 }
 
 pub(crate) fn env_ms(var: &str, default: u64) -> Duration {
@@ -386,6 +392,12 @@ impl Core {
                         break;
                     }
                 }
+                Step::Paste { bytes, only_if, force } => {
+                    if let Err(e) = self.paste_if(id, &bytes, &only_if, force) {
+                        refused = Some(e);
+                        break;
+                    }
+                }
                 Step::FirstTask(bytes) => {
                     let mut st = self.lock();
                     if st.link(id).is_some() {
@@ -479,6 +491,7 @@ impl Core {
                 let gap = t.paste_gap_ms.map_or(PASTE_GAP, Duration::from_millis);
                 let bytes = paste(screen.dec_mode(2004), text);
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
+                let paste = crate::front::conditional(paste, only_if, force);
                 let mut steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
                 if let Some(pid) = front {
                     crate::front::guard(&mut steps, pid);
