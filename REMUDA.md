@@ -187,8 +187,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   remuda tells the process the core saw from a later one given its pid before it reads that
   process's session. Ours: `remuda-core/src/started.rs` (`of`, `boot_ms`, `bracketed`, `settle`,
   `in_session`, `Program` and `Core::foreground_now`, with their tests); in upstream's files the field and
-  `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal,
-  `watch_foreground` calling `foreground_now` where it asked the holder and read `about`, and
+  its literals in `foreground.rs`, which hold `..Default::default()` since `started_since_boot`
+  (below), `watch_foreground` calling `foreground_now` where it asked the holder and read `about`, and
   keeping its look only while the terminal's program is the one it was read under (`Program`: its
   pid and which of the core's spawns started it, counted in memory and never back, so a `lost` or
   a restart meanwhile, the same pid's too whatever the clock says, leaves it for the next look),
@@ -212,9 +212,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `remuda-core/src/started.rs` with their test, `foreground_now` there reading it, and
   `impl Default for Foreground` there; in upstream's files the field, and `..Default::default()`
   in place of `started_ms: None` in the three `about`s of `foreground.rs` and its test's literal, so
-  a later field of ours touches none of them, the feature in `api.rs`, the `foreground` row and a
-  paragraph in `schema/README.md`'s "Fields newer cores add", the generated schema; the end-to-end
-  test is ours, in `tests/remuda.rs`.
+  a later field of ours touches none of them (rustfmt lays the test's `root` literal out a field a
+  line, 123 columns being past the width, so that whole literal is ours), the feature in `api.rs`,
+  the `foreground` row and a paragraph in `schema/README.md`'s "Fields newer cores add", the
+  generated schema; the end-to-end test is ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
