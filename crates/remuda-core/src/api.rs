@@ -25,6 +25,7 @@ pub const FEATURES: &[&str] = &[
     "keep_size",
     "output_watches",
     "send_foreground",
+    "run_literal",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
@@ -78,8 +79,8 @@ methods! { Ctx<'_>;
         "Planned restart (e.g. after an update): screens are saved, programs keep running, the next core adopts them.",
         errors ["invalid_params"];
     "terminal.run" => terminal_run, RunParams => RunResult,
-        "Start a program in a new terminal; or, when argv[0] names a template, start its command and send its body plus the rest of argv as the first message once the agent is ready. Returns once it runs (and the first message is sent or not).",
-        errors ["invalid_params", "name_taken", "spawn_failed", "unavailable", "invalid_template", "not_found", "machine_unknown", "config"];
+        "Start a program in a new terminal; or, when argv[0] names a template, start its command and send its body plus the rest of argv as the first message once the agent is ready. With `literal`, argv starts as it is and no template is looked up. Returns once it runs (and the first message is sent or not).",
+        errors ["invalid_params", "name_taken", "spawn_failed", "unavailable", "invalid_template", "not_found", "machine_unknown", "config", "needs_update"];
     "templates.list" => templates_list, Empty => TemplatesResult,
         "Templates by name and description, so you can pick a role without knowing its command.",
         errors [];

@@ -1,4 +1,4 @@
-//! remuda's own changes (REMUDA.md) to viewers relayed to other cores.
+//! remuda's own changes (REMUDA.md) to calls and viewers relayed to other cores.
 
 use super::*;
 
@@ -9,18 +9,37 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
         .then(|| older(&m.name, true, "can't keep the size for a viewer that types"))
 }
 
-/// A send that names the process it is for, towards a core that would type it whoever is in front. `added`: a
-/// machine this core added, which `rc machine update` reaches; else a core that added us.
-pub(super) fn send_foreground_refused(
-    line: &Line,
-    name: &str,
-    added: bool,
-    method: &str,
-    params: &Value,
-) -> Option<RpcError> {
-    let asked = method == "terminal.send" && !params["foreground"].is_null();
-    (asked && !line.features.iter().any(|f| f == "send_foreground"))
-        .then(|| older(name, added, "can't check what is in front before it types"))
+/// A call carrying what an older core would ignore, to its harm, towards a core without the feature: a send that
+/// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
+/// like the program). A run's `literal` is checked here first, as the core there would check it, so a malformed one
+/// reaches no core. `added`: a machine this core added, which `rc machine update` reaches; else a core that added us
+/// (which is never asked to run: `route`).
+pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
+    if method == "terminal.run"
+        && let Some(invalid) = literal_invalid(params)
+    {
+        return Some(invalid);
+    }
+    let (feature, cannot) = match method {
+        "terminal.send" if !params["foreground"].is_null() => {
+            ("send_foreground", "can't check what is in front before it types")
+        }
+        "terminal.run" if params["literal"] == true => ("run_literal", "would start a template named like the program"),
+        _ => return None,
+    };
+    (!line.features.iter().any(|f| f == feature)).then(|| older(name, added, cannot))
+}
+
+/// `terminal.run`'s own refusals of `literal` (`api/run.rs`): given but not a boolean (null too), or true with `line` or
+/// without argv.
+fn literal_invalid(params: &Value) -> Option<RpcError> {
+    let literal = params.get("literal");
+    if literal.is_some_and(|l| !l.is_boolean()) {
+        return Some(RpcError::invalid_params("literal is true or false"));
+    }
+    let without_argv = params["argv"].as_array().is_none_or(Vec::is_empty);
+    (literal == Some(&Value::Bool(true)) && (!params["line"].is_null() || without_argv))
+        .then(|| RpcError::invalid_params("literal starts argv as it is: give argv, not line"))
 }
 
 fn older(name: &str, added: bool, cannot: &str) -> RpcError {
@@ -44,13 +63,73 @@ mod tests {
         let old = Line::new(frames.clone(), &json!({"features": ["keep_size"]}));
         let current = Line::new(frames, &json!({"features": ["send_foreground"]}));
         let send = json!({"terminal": "t1", "text": "hi", "foreground": 42});
-        let refused = send_foreground_refused(&old, "away", true, "terminal.send", &send).unwrap();
-        assert_eq!((refused.kind.as_str(), refused.hint.as_str()), ("needs_update", "rc machine update away"));
-        let from_a_peer = send_foreground_refused(&old, "lead", false, "terminal.send", &send).unwrap();
+        let refusal = refused(&old, "away", true, "terminal.send", &send).unwrap();
+        assert_eq!((refusal.kind.as_str(), refusal.hint.as_str()), ("needs_update", "rc machine update away"));
+        let from_a_peer = refused(&old, "lead", false, "terminal.send", &send).unwrap();
         assert_eq!(from_a_peer.hint, "update rc on lead");
-        assert!(send_foreground_refused(&current, "away", true, "terminal.send", &send).is_none());
+        assert!(refused(&current, "away", true, "terminal.send", &send).is_none());
         let plain = json!({"terminal": "t1", "text": "hi"});
-        assert!(send_foreground_refused(&old, "away", true, "terminal.send", &plain).is_none());
+        assert!(refused(&old, "away", true, "terminal.send", &plain).is_none());
+    }
+
+    #[test]
+    fn a_literal_run_goes_only_to_cores_that_skip_templates() {
+        let (frames, _rx) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": ["send_foreground"]}));
+        let current = Line::new(frames, &json!({"features": ["run_literal"]}));
+        let run = json!({"argv": ["npm", "run", "dev"], "literal": true});
+        let refusal = refused(&old, "away", true, "terminal.run", &run).unwrap();
+        assert_eq!((refusal.kind.as_str(), refusal.hint.as_str()), ("needs_update", "rc machine update away"));
+        assert!(refused(&current, "away", true, "terminal.run", &run).is_none());
+        let plain = json!({"argv": ["npm", "run", "dev"]});
+        assert!(refused(&old, "away", true, "terminal.run", &plain).is_none());
+        let not_literal = json!({"argv": ["npm", "run", "dev"], "literal": false});
+        assert!(refused(&old, "away", true, "terminal.run", &not_literal).is_none());
+    }
+
+    #[test]
+    fn a_malformed_literal_run_is_refused_here_and_reaches_no_core() {
+        let (frames, mut sent) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": []}));
+        let current = Line::new(frames, &json!({"features": ["run_literal"]}));
+        for run in [
+            json!({"argv": ["npm", "run", "dev"], "literal": "true"}),
+            json!({"argv": ["npm"], "literal": 1}),
+            json!({"argv": ["npm", "run", "dev"], "literal": null}),
+            json!({"line": "npm run dev", "literal": true}),
+            json!({"literal": true}),
+            json!({"argv": [], "literal": true}),
+        ] {
+            for line in [&old, &current] {
+                let refusal = refused(line, "away", true, "terminal.run", &run).expect("refused");
+                assert_eq!(refusal.kind, "invalid_params", "{run}");
+            }
+        }
+        assert!(sent.try_recv().is_err(), "nothing went out");
+    }
+
+    #[tokio::test]
+    async fn a_literal_run_is_never_sent_to_a_core_that_added_us() {
+        let (core, root) = test_core("rc-literal-peer");
+        core.lock().peers.insert("lead-id".into(), Peer { name: "lead".into(), ..Default::default() });
+        let run = json!({"argv": ["npm", "run", "dev"], "literal": true, "on": "lead"});
+        let refusal = route(&core, "terminal.run", &run).err().expect("a peer is not run on");
+        assert_eq!(refusal.kind, "machine_unknown");
+        drop(core);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    fn test_core(what: &str) -> (Arc<Core>, std::path::PathBuf) {
+        let root = crate::test_tmp().join(format!("{what}-{}-{}", std::process::id(), crate::platform::random_hex()));
+        let paths = Paths {
+            socket: root.join("core.sock"),
+            holder_socket: root.join("holder.sock"),
+            state: root.clone(),
+            config: root.join("config.toml"),
+        };
+        paths.create_dirs().unwrap();
+        let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+        (core, root)
     }
 
     #[derive(Clone, Copy, PartialEq)]
@@ -63,19 +142,7 @@ mod tests {
     #[tokio::test]
     async fn a_viewer_that_keeps_the_size_goes_only_to_cores_that_can() {
         for path in [Path::Supported, Path::OldHere, Path::OldFurther] {
-            let root = crate::test_tmp().join(format!(
-                "rc-keep-size-{}-{}",
-                std::process::id(),
-                crate::platform::random_hex()
-            ));
-            let paths = Paths {
-                socket: root.join("core.sock"),
-                holder_socket: root.join("holder.sock"),
-                state: root.clone(),
-                config: root.join("config.toml"),
-            };
-            paths.create_dirs().unwrap();
-            let core = Core::start(paths, crate::api::CoreInfo { id: "here".into(), name: "here".into() }).unwrap();
+            let (core, root) = test_core("rc-keep-size");
             let machine = Machine {
                 name: "away".into(),
                 target: "away".into(),

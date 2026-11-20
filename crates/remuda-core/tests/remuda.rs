@@ -260,3 +260,50 @@ fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
     assert!(reply["error"].is_null(), "{reply}");
     wait_until("a send naming what is in front goes in", || text(&s, &t).contains("SENT-42"));
 }
+
+/// A template named after `name`, whose command says so if it ever runs (no first message to wait to send).
+fn template_named(s: &Session, name: &str) {
+    let dir = s.root.join("config/remuda-core/templates");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join(format!("{name}.md")), "---\ncommand: sh -c 'echo TEMPLATE-RAN; sleep 30'\n---\n").unwrap();
+}
+
+fn run_api(s: &Session, params: serde_json::Value) -> serde_json::Value {
+    s.json(&["ls"]);
+    s.connect().call(1, "terminal.run", params)
+}
+
+#[test]
+fn a_literal_run_starts_its_program_though_a_template_has_its_name() {
+    let s = session("0");
+    template_named(&s, "printf");
+    let reply = run_api(&s, json!({"argv": ["printf", "LITERAL-%s\\n", "ok"], "literal": true, "wait": true}));
+    assert!(reply["error"].is_null(), "{reply}");
+    let result = &reply["result"];
+    assert!(result["first_message"].is_null(), "{reply}");
+    assert!(result["output"].as_str().unwrap().contains("LITERAL-ok"), "{reply}");
+    let templated = run(&s, &["printf"]);
+    wait_until("the template runs without literal", || text(&s, &templated).contains("TEMPLATE-RAN"));
+}
+
+#[test]
+fn a_literal_run_of_a_missing_program_fails_to_spawn_though_a_template_has_its_name() {
+    let s = session("0");
+    template_named(&s, "rc-no-such-program");
+    let reply = run_api(&s, json!({"argv": ["rc-no-such-program"], "literal": true}));
+    assert_eq!(reply["error"]["data"]["kind"], "spawn_failed", "{reply}");
+}
+
+#[test]
+fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
+    let s = session("0");
+    for params in [
+        json!({"line": "echo hi", "literal": true}),
+        json!({"literal": true}),
+        json!({"argv": ["printf", "x"], "literal": "true"}),
+        json!({"argv": ["printf", "x"], "literal": null}),
+    ] {
+        let reply = run_api(&s, params);
+        assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");
+    }
+}

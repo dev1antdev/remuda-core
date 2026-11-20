@@ -40,7 +40,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - **The API** differs from herdr-core's in names: the error kind `rc_missing` (theirs
   `hc_missing`), the `<rc …>` notes an agent is typed, and the `RC_*` variables; and in what we
   add, listed below (`terminal.keys`'s `now`, `terminal.attach`'s `keep_size`, `terminal.read`'s
-  `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`).
+  `format`, `events.subscribe`'s `output`, `terminal.send`'s `foreground`, `terminal.run`'s
+  `literal`).
 
 ## Keeping upstream's fixes applying
 
@@ -115,7 +116,7 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   its message run by the shell behind it; a relay refuses the field towards a core without the
   feature (`needs_update`). Ours: `remuda-core/src/front.rs` (`send_for`, `guard`, `last_seen`,
   `in_front`, `ask`, `Asked`, `answering`, `link_ended`, `linked`, with their tests) and
-  `send_foreground_refused` with the shared `older` in `remote/remuda.rs` (with its test); in
+  `refused` with the shared `older` in `remote/remuda.rs` (with its test); in
   upstream's files the `Front` step and its arm in `input.rs`'s `type_in` (a refusal still ends the
   step's turn and hands the person's held keys over), `send_message` made `pub(crate)` with a
   `front` param and its check in the prepare closure (`send` and `send_first_task` pass `None`),
@@ -133,6 +134,19 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   description, the `not_submitted` and `needs_update` errors and the feature in `api.rs`, the two
   refusal calls in `remote.rs`, `mod front;` in `lib.rs`, a paragraph in `schema/README.md`, the
   generated schema; the end-to-end test is ours, in `tests/remuda.rs`.
+- `terminal.run` takes `literal` (API only, no CLI flag: the CLI says no hello, so it could not tell
+  whether the core takes it; `run_literal` in hello's features): argv starts as it is, no template
+  looked up by its first word and no first message sent, so a program named like a template runs
+  itself and a missing one is `spawn_failed`; it needs argv (`invalid_params` with `line` or with
+  neither); a relay to an added machine checks it as that core would (`invalid_params`) and refuses it
+  towards a core without the feature (`needs_update`), which would start the template instead (a core
+  that added us is never asked to run, upstream's rule). remuda lays a scene's pane command out with
+  it. Ours: `refused`'s `terminal.run` arm and `literal_invalid` in `remote/remuda.rs` (with their
+  tests and `test_core`, which the keep-size test now shares); in upstream's files the param in
+  `api/types.rs`, the check and the template lookup skipped in `api/run.rs`, the description, the
+  `needs_update` error and the feature in `api.rs`, a paragraph in `schema/README.md` under a section
+  of its own, "Call options newer cores add", before Events (the `foreground` paragraph moved there
+  too), the generated schema; the end-to-end tests are ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
