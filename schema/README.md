@@ -177,10 +177,16 @@ took one pid within it apart, so a client also checks a finer time the process
 records itself when it has one (Claude Code's `startedAt`, in ms, is never
 before `started_ms`); on Linux a program's own record of its start does not
 follow a step of the clock as `started_ms` and `ps` do, so after a step such a
-check cannot tell, which reads as no match. The process is read between two of
-the terminal's own answers naming it in front, its start before and after the
-rest: a look where the start moved, or the terminal named another (the process
-left, and its pid may now be another terminal's), tells no foreground. Cores advertise `foreground_started` in `hello.features`; a
+check cannot tell, which reads as no match. Times alone cannot tell a record a
+crashed process left from one of a later process given its pid, when a step of
+the clock put both starts in one second: `started_ms` is what the OS keeps, and
+no more than wall-clock times can be compared with a program's own record of
+them. The process is read between two of the terminal's own answers naming it in
+front, its start before and after the rest, and on Unix it must be in the
+terminal's session (that of its program, which every process in front of it is
+in): a look where the start moved, the terminal named another, or the process is
+another terminal's (its pid given out again while the terminal still names the
+group it led) tells no foreground. Cores advertise `foreground_started` in `hello.features`; a
 terminal relayed from an added machine carries its own core's foreground, so a
 missing `started_ms` means unknown for that terminal (an older core there, or an
 OS that would not tell), whatever the first core's hello said.

@@ -8,25 +8,35 @@ use crate::runtime::Core;
 
 impl Core {
     /// What is in front of terminal `id`: the facts and the creation of the process group its holder names, read
-    /// between two of its answers that name the same group, the creation read before and after the facts. A process
-    /// that left meanwhile, and with it a pid given to a process of another terminal, tells nothing this look.
+    /// between two of its answers that name the same group, the creation read before and after the facts, and on Unix
+    /// only a process of the terminal's own session (its program's: every process in front of it is in it). A process
+    /// that left meanwhile, and with it a pid given to a process of another terminal, tells nothing this look, though
+    /// the terminal still names the group it led.
     pub(crate) async fn foreground_now(&self, id: u32) -> Option<Foreground> {
+        let session = self.lock().reg.terminals.get(&id).and_then(|t| t.pid);
         let pgid = self.foreground(id).await;
         if pgid <= 0 {
             return None;
         }
-        let facts = about(pgid)?;
-        (self.foreground(id).await == pgid).then_some(facts)
+        let before = of(pgid);
+        let facts = crate::foreground::about(pgid)?;
+        let ours = in_session(pgid, session);
+        let after = of(pgid);
+        (before == after && ours && self.foreground(id).await == pgid)
+            .then_some(Foreground { started_ms: after, ..facts })
     }
 }
 
-/// The facts about `pid` with its creation, read before and after them: a pid that changed hands meanwhile tells
-/// nothing, rather than one process's name with another's start.
-pub fn about(pid: i32) -> Option<Foreground> {
-    let before = of(pid);
-    let facts = crate::foreground::about(pid)?;
-    let after = of(pid);
-    (before == after).then_some(Foreground { started_ms: after, ..facts })
+/// Whether `pid` is in the session `session` leads (a terminal's program, which the holder makes its session's
+/// leader); unchecked while the terminal waits for a program, and on Windows, which has no sessions to ask.
+#[cfg(unix)]
+fn in_session(pid: i32, session: Option<u32>) -> bool {
+    session.is_none_or(|leader| unsafe { libc::getsid(pid) } == leader as i32)
+}
+
+#[cfg(windows)]
+fn in_session(_: i32, _: Option<u32>) -> bool {
+    true
 }
 
 /// The process's creation in unix ms, if it is still there to read.
@@ -106,6 +116,23 @@ mod tests {
         assert!(started <= now && started > now - 3_600_000, "started {started}, now {now}");
         assert_eq!(super::of(pid), Some(started));
         assert_eq!(super::of(i32::MAX), None);
-        assert_eq!(super::about(pid).and_then(|f| f.started_ms), Some(started));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_of_another_session_is_not_in_front_of_this_ones_terminal() {
+        use std::os::unix::process::CommandExt;
+        let mut other = std::process::Command::new("sleep");
+        other.arg("30");
+        unsafe { other.pre_exec(|| if libc::setsid() < 0 { Err(std::io::Error::last_os_error()) } else { Ok(()) }) };
+        let mut other = other.spawn().unwrap();
+        let leader = other.id();
+        let own = unsafe { libc::getsid(0) } as u32;
+        assert!(super::in_session(leader as i32, Some(leader)));
+        assert!(!super::in_session(std::process::id() as i32, Some(leader)), "a process of another session taken in");
+        assert!(super::in_session(std::process::id() as i32, Some(own)));
+        assert!(super::in_session(std::process::id() as i32, None), "a terminal waiting for a program checks nothing");
+        let _ = other.kill();
+        let _ = other.wait();
     }
 }
