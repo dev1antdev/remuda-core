@@ -478,7 +478,7 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
         let boot = std::fs::read_to_string("/proc/sys/kernel/random/boot_id").unwrap();
         let stat = std::fs::read_to_string(format!("/proc/{sleep}/stat")).unwrap();
         let ticks: u64 = stat[stat.rfind(')').unwrap() + 2..].split(' ').nth(19).unwrap().parse().unwrap();
-        let ns = std::fs::read_link("/proc/self/ns/time").map(|ns| ns.display().to_string()).unwrap_or_default();
+        let ns = std::fs::read_link("/proc/self/ns/time").unwrap().display().to_string();
         let told = (since["boot_id"].as_str(), since["time_ns"].as_str(), since["ticks"].as_u64());
         assert_eq!(told, (Some(boot.trim()), Some(ns.as_str()), Some(ticks)), "{front}");
         // a reader in another time namespace sees the ticks shifted by its boot-time offset, and another namespace

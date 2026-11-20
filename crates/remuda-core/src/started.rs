@@ -93,9 +93,9 @@ fn in_session(_: i32, _: Option<u32>) -> bool {
 }
 
 /// A process's start as the boot it began in counts it, which no step of the wall clock moves: that boot (Linux's
-/// `/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link, "" on a
-/// kernel without them), whose boot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the
-/// boot (`/proc/<pid>/stat`'s starttime).
+/// `/proc/sys/kernel/random/boot_id`), the time namespace the core read it in (`/proc/self/ns/time`'s link), whose
+/// boot-time offset Linux adds to the ticks a reader sees, and the clock ticks since the boot (`/proc/<pid>/stat`'s
+/// starttime).
 #[derive(Serialize, Deserialize, JsonSchema, Clone, Debug, PartialEq)]
 pub struct SinceBoot {
     pub boot_id: String,
@@ -103,11 +103,12 @@ pub struct SinceBoot {
     pub ticks: u64,
 }
 
-/// The process's start since boot, on Linux, if it is still there to read; elsewhere `started_ms` is the creation
-/// the OS stored and no step moves it, and this tells nothing.
+/// The process's start since boot, on Linux, if it is still there to read and the core can name the time namespace it
+/// reads in (a kernel without them, or a sandbox hiding the link, tells nothing); elsewhere `started_ms` is the
+/// creation the OS stored, and this tells nothing.
 #[cfg(target_os = "linux")]
 pub fn since_boot(pid: i32) -> Option<SinceBoot> {
-    let time_ns = std::fs::read_link("/proc/self/ns/time").map(|ns| ns.display().to_string()).unwrap_or_default();
+    let time_ns = std::fs::read_link("/proc/self/ns/time").ok()?.display().to_string();
     Some(SinceBoot { boot_id: crate::platform::boot_id().ok().flatten()?, time_ns, ticks: start_ticks(pid)? })
 }
 

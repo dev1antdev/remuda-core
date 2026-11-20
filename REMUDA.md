@@ -201,7 +201,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   hello's features): that process's start as its boot counts it, `{boot_id, time_ns, ticks}`
   (`/proc/sys/kernel/random/boot_id` through `platform::boot_id`, which the restart reads too, the
   core's own time namespace from `/proc/self/ns/time`, whose boot-time offset Linux adds to the
-  ticks a reader sees, and `/proc/<pid>/stat`'s starttime), which no step
+  ticks a reader sees — none told when that link cannot be read — and `/proc/<pid>/stat`'s
+  starttime), which no step
   of the wall clock moves, so a process born as much later as the clock went back is not taken for
   the one before, as `started_ms` alone would take it; read with `started_ms`, the look kept only
   while both are the same before and after it; absent on macOS and Windows, whose `started_ms` is
