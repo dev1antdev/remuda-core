@@ -14,6 +14,18 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
     })
 }
 
+/// A send that names the process it is for, towards a core that would type it whoever is in front.
+pub(super) fn send_foreground_refused(line: &Line, name: &str, method: &str, params: &Value) -> Option<RpcError> {
+    let asked = method == "terminal.send" && !params["foreground"].is_null();
+    (asked && !line.features.iter().any(|f| f == "send_foreground")).then(|| {
+        RpcError::new(
+            "needs_update",
+            format!("{name}'s rc is older and can't check what is in front before it types"),
+            format!("rc machine update {name}"),
+        )
+    })
+}
+
 /// The CLOSE reason of a relayed stream a core on its path is too old for.
 pub(super) fn too_old(e: &RpcError) -> Vec<u8> {
     json!({"error": e.to_json()}).to_string().into_bytes()
@@ -23,6 +35,19 @@ pub(super) fn too_old(e: &RpcError) -> Vec<u8> {
 mod tests {
     use super::*;
     use crate::paths::Paths;
+
+    #[test]
+    fn a_send_naming_its_foreground_goes_only_to_cores_that_check_it() {
+        let (frames, _rx) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": ["keep_size"]}));
+        let current = Line::new(frames, &json!({"features": ["send_foreground"]}));
+        let send = json!({"terminal": "t1", "text": "hi", "foreground": 42});
+        let refused = send_foreground_refused(&old, "away", "terminal.send", &send);
+        assert_eq!(refused.map(|e| e.kind), Some("needs_update".to_string()));
+        assert!(send_foreground_refused(&current, "away", "terminal.send", &send).is_none());
+        let plain = json!({"terminal": "t1", "text": "hi"});
+        assert!(send_foreground_refused(&old, "away", "terminal.send", &plain).is_none());
+    }
 
     #[derive(Clone, Copy, PartialEq)]
     enum Path {

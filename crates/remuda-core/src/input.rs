@@ -257,6 +257,11 @@ pub enum Step {
     Write(Vec<u8>),
     Pause(Duration),
     EndDraft(Vec<u8>),
+    /// The steps after it go only while this process group leads the terminal (remuda's, `front.rs`).
+    Front {
+        pid: i32,
+        pasted: bool,
+    },
 }
 
 pub(crate) fn env_ms(var: &str, default: u64) -> Duration {
@@ -373,8 +378,15 @@ impl Core {
                 tokio::time::sleep(left.min(Duration::from_millis(25))).await;
             }
         };
+        let mut refused = None;
         for step in steps {
             match step {
+                Step::Front { pid, pasted } => {
+                    if let Err(e) = self.in_front(id, pid, pasted).await {
+                        refused = Some(e);
+                        break;
+                    }
+                }
                 Step::FirstTask(bytes) => {
                     let mut st = self.lock();
                     if st.link(id).is_some() {
@@ -400,17 +412,25 @@ impl Core {
         if let Some(link) = st.link(id) {
             link.input(id, &held);
         }
-        Ok(out)
+        refused.map_or(Ok(out), Err)
     }
 
     /// Paste + Enter, after a person has paused typing. Refuses a blocked
     /// program (typing would answer its dialog) unless `force`.
-    pub async fn send(&self, id: u32, text: &str, force: bool, only_if: Option<&str>) -> Result<Sent, RpcError> {
-        self.send_message(id, text, force, only_if, false).await
+    /// With `front`, types only while that process group leads the terminal.
+    pub async fn send(
+        &self,
+        id: u32,
+        text: &str,
+        force: bool,
+        only_if: Option<&str>,
+        front: Option<i32>,
+    ) -> Result<Sent, RpcError> {
+        self.send_message(id, text, force, only_if, front, false).await
     }
 
     pub(crate) async fn send_first_task(&self, id: u32, text: &str) -> Result<Sent, RpcError> {
-        self.send_message(id, text, false, None, true).await
+        self.send_message(id, text, false, None, None, true).await
     }
 
     async fn send_message(
@@ -419,6 +439,7 @@ impl Core {
         text: &str,
         force: bool,
         only_if: Option<&str>,
+        front: Option<i32>,
         first_task: bool,
     ) -> Result<Sent, RpcError> {
         if let Some(t) = self.lock().reg.terminals.get(&id) {
@@ -442,6 +463,9 @@ impl Core {
                         ),
                     ));
                 }
+                if let Some(pid) = front {
+                    crate::front::last_seen(t, pid)?;
+                }
                 if let Some(want) = only_if
                     && word.as_deref() != Some(want)
                 {
@@ -464,7 +488,10 @@ impl Core {
                 let gap = t.paste_gap_ms.map_or(PASTE_GAP, Duration::from_millis);
                 let bytes = paste(screen.dec_mode(2004), text);
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
-                let steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
+                let mut steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
+                if let Some(pid) = front {
+                    crate::front::guard(&mut steps, pid);
+                }
                 Ok(((word, t.turn, t.reported), steps))
             })
             .await?;

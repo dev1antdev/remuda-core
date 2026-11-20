@@ -170,6 +170,16 @@ stand. Cores advertise `output_watches` in `hello.features`; clients send
 `output` only to a core that lists it, since an older core accepts the field
 and never tells.
 
+`foreground: <pid>` on `terminal.send` types only while that process group leads
+the terminal (the `pid` of its `foreground`): refused as `status_mismatch` when the
+core's last look already saw another, then looked at afresh before the paste and
+again before Enter, so a program that left while the send waited for a person's
+draft never has the text run by the shell behind it (refused after the paste, the
+text is left unsubmitted, as the hint says). Cores advertise `send_foreground` in
+`hello.features`; a relay refuses the field towards a core that does not
+(`needs_update`). Clients send it only to a core that lists it: an older core
+ignores it and types whatever is in front.
+
 Terminals on machines this core added are in the same stream, addressed as
 seen from here (`rohan/t7`), in the same order and filters (`terminal`,
 `children_of`, labels). When a machine's line comes back, its terminals that

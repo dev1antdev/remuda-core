@@ -24,6 +24,7 @@ pub const FEATURES: &[&str] = &[
     "restart_environment",
     "keep_size",
     "output_watches",
+    "send_foreground",
 ];
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
@@ -106,8 +107,8 @@ methods! { Ctx<'_>;
         "Open a raw stream to a live terminal on this framed connection (see `hello` with `framed`). Loss ends the stream even when kept; reattach after the restarted event.",
         errors ["not_found", "machine_unknown", "finished", "unavailable", "needs_framed", "needs_update"];
     "terminal.send" => terminal_send, SendParams => SendResult,
-        "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`.",
-        errors ["not_found", "machine_unknown", "finished", "unavailable", "blocked", "status_mismatch", "invalid_params", "config", "cancelled"];
+        "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter.",
+        errors ["not_found", "machine_unknown", "finished", "unavailable", "blocked", "status_mismatch", "invalid_params", "config", "cancelled", "needs_update"];
     "terminal.wait" => terminal_wait, WaitParams => crate::wait::WaitResult,
         "Wait until the program is not working (any word but working, or it exited/was lost); already not working returns at once. A program that never reported status is working until it exits. After a send from the same caller, waits for the turn that send started. A message to the caller also ends it: ended false, reason message, from = sender. A timeout is a check-in: ended false, current status.",
         errors ["not_found", "machine_unknown", "invalid_params", "needs_target", "config"];
@@ -478,7 +479,7 @@ async fn terminal_send(core: Ctx<'_>, p: SendParams) -> Result<SendResult, RpcEr
     let timeout = wait_timeout(core, p.timeout)?; // checked before anything is typed
     let id = resolve(core, &p.terminal)?;
     let text = core.tagged(p.caller.as_deref(), id, &p.text, false);
-    let sent = core.send(id, &text, p.force, p.only_if.map(|w| word(&w)).as_deref()).await?;
+    let sent = core.send(id, &text, p.force, p.only_if.map(|w| word(&w)).as_deref(), p.foreground).await?;
     if let Some(child) = p.caller.as_deref().and_then(crate::terminals::parse_id) {
         let mut st = core.lock();
         if let Some(c) = st

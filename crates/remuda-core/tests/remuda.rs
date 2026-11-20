@@ -219,3 +219,38 @@ fn an_output_watch_outlives_a_kept_terminal_restarting() {
     }
     assert_eq!(heard, "two FAIL");
 }
+
+/// The process group in front of `t`, once the core has looked (0 before).
+fn in_front(s: &Session, t: &str) -> i64 {
+    get(s, t)["foreground"]["pid"].as_i64().unwrap_or(0)
+}
+
+#[test]
+fn a_send_for_a_program_that_left_while_a_draft_waited_types_nothing() {
+    let mut s = session("0");
+    s.env.push(("RC_DRAFT_MS".into(), "1500".into()));
+    s.env.push(("RC_FOREGROUND_MS".into(), "50".into()));
+    let t = run(&s, &["sh"]);
+    let shell = get(&s, &t)["pid"].as_i64().unwrap();
+    wait_until("the shell in front", || in_front(&s, &t) == shell);
+    s.json(&["send", &t, "sleep 30"]);
+    wait_until("sleep in front", || ![0, shell].contains(&in_front(&s, &t)));
+    let sleep = in_front(&s, &t);
+    let mut person = Viewer::attach(&s, &t, 80, 24, json!({}));
+    person.typed(b"draft");
+    person.shows("draft");
+    std::thread::scope(|scope| {
+        let send = scope.spawn(|| s.err(&["send", &t, "echo SENT-$((6*7))", "--foreground", &sleep.to_string()]));
+        std::thread::sleep(Duration::from_millis(300));
+        unsafe { libc::kill(sleep as i32, libc::SIGKILL) };
+        let (_, err) = send.join().unwrap();
+        assert_eq!(err["error"]["kind"], "status_mismatch", "{err}");
+        assert!(err["error"]["hint"].as_str().unwrap().contains("nothing was typed"), "{err}");
+    });
+    wait_until("the shell in front again", || in_front(&s, &t) == shell);
+    person.typed(b"\x15");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!text(&s, &t).contains("SENT"), "typed into the shell: {}", text(&s, &t));
+    s.json(&["send", &t, "echo SENT-$((6*7))", "--foreground", &shell.to_string()]);
+    wait_until("a send naming what is in front goes in", || text(&s, &t).contains("SENT-42"));
+}

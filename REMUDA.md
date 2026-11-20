@@ -107,6 +107,19 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   regenerated `THIRD-PARTY-NOTICES` and schema, the `output` row and a paragraph in
   `schema/README.md`; the tests are ours, in `watches.rs`,
   `styled.rs` and `tests/remuda.rs`.
+- `terminal.send` takes `foreground` (`rc send --foreground <pid>`, `send_foreground` in hello's
+  features): it types only while that process group leads the terminal — refused as
+  `status_mismatch` when the last look already saw another, then looked at afresh before the paste and
+  again before Enter — so an agent that left while the send waited for a person's draft never has
+  its message run by the shell behind it; a relay refuses the field towards a core without the
+  feature (`needs_update`). Ours: `remuda-core/src/front.rs` (`guard`, `last_seen`, `in_front`, with
+  its test) and `send_foreground_refused` in `remote/remuda.rs` (with its test); in upstream's files
+  the `Front` step and its arm in `input.rs`'s `type_in` (a refusal still ends the step's turn and
+  hands the person's held keys over), `send`'s `front` and its check in `send_message`, the param in
+  `api/types.rs`, its pass and the feature in `api.rs`, the two refusal calls in `remote.rs`,
+  `mod front;` in `lib.rs`, `None` in `runtime/tests.rs`'s send, a paragraph in `schema/README.md`,
+  the generated docs and schema; the tests are ours, in `tests/remuda.rs`, and one in
+  `tests/windows.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
