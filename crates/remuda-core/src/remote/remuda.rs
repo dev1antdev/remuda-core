@@ -13,7 +13,8 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
 /// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
 /// like the program). A run's `literal` is checked here first, as the core there would check it, so a malformed one
 /// reaches no core. A send's `if` naming a status word newer than idle and working is refused as that core would
-/// refuse it, `invalid_params` (which a client reads as an older core), with the update in its hint. `added`: a
+/// refuse it, `invalid_params` (which a client reads as an older core), with the update in its hint; a terminal it
+/// relays further (`worker/t1`) is left to the core that types (a relay passes `if` on as it is). `added`: a
 /// machine this core added, which `rc machine update` reaches; else a core that added us (which is never asked to
 /// run: `route`).
 pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
@@ -24,6 +25,7 @@ pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params
     }
     if method == "terminal.send"
         && matches!(params["if"].as_str(), Some("done" | "blocked" | "error"))
+        && !params["terminal"].as_str().is_some_and(|t| t.contains('/'))
         && !line.features.iter().any(|f| f == "send_if_any_status")
     {
         let older = older(name, added, "its if takes idle or working alone");
@@ -92,6 +94,8 @@ mod tests {
         assert_eq!(refusal.hint, "rc machine update away");
         assert_eq!(refused(&old, "lead", false, "terminal.send", &done).unwrap().hint, "update rc on lead");
         assert!(refused(&current, "away", true, "terminal.send", &done).is_none());
+        let further = json!({"terminal": "worker/t1", "text": "hi", "if": "done"});
+        assert!(refused(&old, "away", true, "terminal.send", &further).is_none(), "the core that types decides");
         for word in ["idle", "working"] {
             let send = json!({"terminal": "t1", "text": "hi", "if": word});
             assert!(refused(&old, "away", true, "terminal.send", &send).is_none(), "{word}");

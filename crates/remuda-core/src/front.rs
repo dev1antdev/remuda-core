@@ -55,11 +55,12 @@ pub(crate) fn linked(own_replies: &mut HashSet<String>, welcome: &crate::holder_
     }
 }
 
-/// Puts a look at the terminal's foreground before the paste and again before its submit, the last step.
-pub(crate) fn guard(steps: &mut Vec<Step>, pid: i32) {
+/// Puts a look at the terminal's foreground before the paste and again before its submit, the last step. The send's
+/// `if` is checked again after the first look, which waits on the holder: the status may have moved meanwhile.
+pub(crate) fn guard(steps: &mut Vec<Step>, pid: i32, only_if: Option<&str>) {
     let submit = steps.len().saturating_sub(1);
-    steps.insert(submit, Step::Front { pid, pasted: true });
-    steps.insert(0, Step::Front { pid, pasted: false });
+    steps.insert(submit, Step::Front { pid, pasted: true, status: None });
+    steps.insert(0, Step::Front { pid, pasted: false, status: only_if.map(String::from) });
 }
 
 /// Refused at once when the core's last look already saw another program in front, before the send takes the
@@ -123,8 +124,8 @@ impl Core {
 
     /// Ok while process group `pid` leads terminal `id`'s foreground, as its holder answers this very lookup (a
     /// foreground that cannot be read, or a holder that may answer another lookup's, counts as another), and before
-    /// the paste while the caller still waits for it.
-    pub(crate) async fn in_front(&self, id: u32, pid: i32, pasted: bool) -> Result<(), RpcError> {
+    /// the paste while the caller still waits for it and the status is still `status` when the send names one.
+    pub(crate) async fn in_front(&self, id: u32, pid: i32, pasted: bool, status: Option<&str>) -> Result<(), RpcError> {
         let asked = ask(&mut self.lock(), id, true);
         let answer = match asked {
             Some(rx) => tokio::time::timeout(std::time::Duration::from_secs(1), rx).await.ok().and_then(Result::ok),
@@ -134,8 +135,25 @@ impl Core {
         if now <= 0 || now != pid {
             return Err(moved(id, pid, now, pasted));
         }
+        if let Some(want) = status {
+            let st = self.lock();
+            still(id, st.reg.terminals.get(&id).and_then(|t| t.status.as_ref()).map(|s| s.state.as_str()), want)?;
+        }
         if pasted { Ok(()) } else { crate::server::check_cancelled() }
     }
+}
+
+/// The send's `if` against the status now, as `send_message` checks it before the look: nothing was typed yet.
+fn still(id: u32, word: Option<&str>, want: &str) -> Result<(), RpcError> {
+    if word == Some(want) {
+        return Ok(());
+    }
+    let address = crate::terminals::address(id);
+    Err(RpcError::new(
+        "status_mismatch",
+        format!("{address} is {}, not {want}", word.unwrap_or("silent")),
+        "nothing was typed",
+    ))
 }
 
 #[cfg(test)]
@@ -181,16 +199,26 @@ mod tests {
     fn the_paste_and_its_submit_each_wait_on_a_look() {
         let mut steps =
             vec![Step::Write(b"text".to_vec()), Step::Pause(crate::input::PASTE_GAP), Step::Write(b"\r".to_vec())];
-        guard(&mut steps, 42);
+        guard(&mut steps, 42, Some("done"));
         let shape: Vec<String> = steps
             .iter()
             .map(|s| match s {
-                Step::Front { pid, pasted } => format!("front {pid} {pasted}"),
+                Step::Front { pid, pasted, status } => format!("front {pid} {pasted} {status:?}"),
                 Step::Write(b) => format!("write {}", String::from_utf8_lossy(b)),
                 Step::Pause(_) => "pause".into(),
                 _ => "other".into(),
             })
             .collect();
-        assert_eq!(shape, ["front 42 false", "write text", "pause", "front 42 true", "write \r"]);
+        let looks = ["front 42 false Some(\"done\")", "write text", "pause", "front 42 true None", "write \r"];
+        assert_eq!(shape, looks, "only the look before the paste checks the send's if again");
+    }
+
+    #[test]
+    fn a_status_that_moved_during_the_look_before_the_paste_types_nothing() {
+        assert!(still(7, Some("done"), "done").is_ok());
+        for now in [Some("working"), None] {
+            let refusal = still(7, now, "done").unwrap_err();
+            assert_eq!((refusal.kind.as_str(), refusal.hint.as_str()), ("status_mismatch", "nothing was typed"));
+        }
     }
 }

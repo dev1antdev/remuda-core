@@ -260,6 +260,7 @@ pub enum Step {
     Front {
         pid: i32,
         pasted: bool,
+        status: Option<String>,
     },
 }
 
@@ -380,8 +381,8 @@ impl Core {
         let mut refused = None;
         for step in steps {
             match step {
-                Step::Front { pid, pasted } => {
-                    if let Err(e) = self.in_front(id, pid, pasted).await {
+                Step::Front { pid, pasted, status } => {
+                    if let Err(e) = self.in_front(id, pid, pasted, status.as_deref()).await {
                         refused = Some(e);
                         break;
                     }
@@ -481,7 +482,7 @@ impl Core {
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
                 let mut steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
                 if let Some(pid) = front {
-                    crate::front::guard(&mut steps, pid);
+                    crate::front::guard(&mut steps, pid, only_if);
                 }
                 Ok(((word, t.turn, t.reported), steps))
             })
