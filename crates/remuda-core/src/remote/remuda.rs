@@ -10,20 +10,35 @@ pub(super) fn keep_size_refused(line: &Line, m: &Machine, params: &Value) -> Opt
 }
 
 /// A call carrying what an older core would ignore, to its harm, towards a core without the feature: a send that
-/// names the process it is for (it would type whoever is in front), a run with any `literal` but false (it would
-/// start a template named like the program; a newer core checks the value itself). `added`: a machine this core
-/// added, which `rc machine update` reaches; else a core that added us (which is never asked to run: `route`).
+/// names the process it is for (it would type whoever is in front), a literal run (it would start a template named
+/// like the program). A run's `literal` is checked here first, as the core there would check it, so a malformed one
+/// reaches no core. `added`: a machine this core added, which `rc machine update` reaches; else a core that added us
+/// (which is never asked to run: `route`).
 pub(super) fn refused(line: &Line, name: &str, added: bool, method: &str, params: &Value) -> Option<RpcError> {
+    if method == "terminal.run"
+        && let Some(invalid) = literal_invalid(params)
+    {
+        return Some(invalid);
+    }
     let (feature, cannot) = match method {
         "terminal.send" if !params["foreground"].is_null() => {
             ("send_foreground", "can't check what is in front before it types")
         }
-        "terminal.run" if !matches!(params["literal"], Value::Null | Value::Bool(false)) => {
-            ("run_literal", "would start a template named like the program")
-        }
+        "terminal.run" if params["literal"] == true => ("run_literal", "would start a template named like the program"),
         _ => return None,
     };
     (!line.features.iter().any(|f| f == feature)).then(|| older(name, added, cannot))
+}
+
+/// `terminal.run`'s own refusals of `literal` (`api/run.rs`): not a boolean, or true with `line` or without argv.
+fn literal_invalid(params: &Value) -> Option<RpcError> {
+    let literal = &params["literal"];
+    if !matches!(literal, Value::Null | Value::Bool(_)) {
+        return Some(RpcError::invalid_params("literal is true or false"));
+    }
+    let without_argv = params["argv"].as_array().is_none_or(Vec::is_empty);
+    (*literal == true && (!params["line"].is_null() || without_argv))
+        .then(|| RpcError::invalid_params("literal starts argv as it is: give argv, not line"))
 }
 
 fn older(name: &str, added: bool, cannot: &str) -> RpcError {
@@ -67,14 +82,28 @@ mod tests {
         assert!(refused(&current, "away", true, "terminal.run", &run).is_none());
         let plain = json!({"argv": ["npm", "run", "dev"]});
         assert!(refused(&old, "away", true, "terminal.run", &plain).is_none());
-        let unread = json!({"argv": ["npm", "run", "dev"], "literal": "true"});
-        assert!(
-            refused(&old, "away", true, "terminal.run", &unread).is_some(),
-            "an older core would start npm's template"
-        );
-        assert!(refused(&current, "away", true, "terminal.run", &unread).is_none(), "a newer core refuses it itself");
         let not_literal = json!({"argv": ["npm", "run", "dev"], "literal": false});
         assert!(refused(&old, "away", true, "terminal.run", &not_literal).is_none());
+    }
+
+    #[test]
+    fn a_malformed_literal_run_is_refused_here_and_reaches_no_core() {
+        let (frames, mut sent) = mpsc::unbounded_channel();
+        let old = Line::new(frames.clone(), &json!({"features": []}));
+        let current = Line::new(frames, &json!({"features": ["run_literal"]}));
+        for run in [
+            json!({"argv": ["npm", "run", "dev"], "literal": "true"}),
+            json!({"argv": ["npm"], "literal": 1}),
+            json!({"line": "npm run dev", "literal": true}),
+            json!({"literal": true}),
+            json!({"argv": [], "literal": true}),
+        ] {
+            for line in [&old, &current] {
+                let refusal = refused(line, "away", true, "terminal.run", &run).expect("refused");
+                assert_eq!(refusal.kind, "invalid_params", "{run}");
+            }
+        }
+        assert!(sent.try_recv().is_err(), "nothing went out");
     }
 
     #[tokio::test]

@@ -138,11 +138,11 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   whether the core takes it; `run_literal` in hello's features): argv starts as it is, no template
   looked up by its first word and no first message sent, so a program named like a template runs
   itself and a missing one is `spawn_failed`; it needs argv (`invalid_params` with `line` or with
-  neither); a relay to an added machine refuses it, any value but `false`, towards a core without the
-  feature (`needs_update`), which would start the template instead (a core that added us is never
-  asked to run, upstream's rule). remuda lays a scene's pane command out with it. Ours: `refused`'s
-  `terminal.run` arm in `remote/remuda.rs` (with its tests and `test_core`, which the keep-size test
-  now shares); in upstream's files the param in
+  neither); a relay to an added machine checks it as that core would (`invalid_params`) and refuses it
+  towards a core without the feature (`needs_update`), which would start the template instead (a core
+  that added us is never asked to run, upstream's rule). remuda lays a scene's pane command out with
+  it. Ours: `refused`'s `terminal.run` arm and `literal_invalid` in `remote/remuda.rs` (with their
+  tests and `test_core`, which the keep-size test now shares); in upstream's files the param in
   `api/types.rs`, the check and the template lookup skipped in `api/run.rs`, the description, the
   `needs_update` error and the feature in `api.rs`, a paragraph in `schema/README.md` under a section
   of its own, "Call options newer cores add", before Events (the `foreground` paragraph moved there

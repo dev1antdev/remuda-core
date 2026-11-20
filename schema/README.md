@@ -141,9 +141,10 @@ front. The CLI has no flag for it.
 by its first word and no first message is sent, so a program named like a template
 runs itself, and a missing one is `spawn_failed`. It needs `argv`: with `line`, or
 with neither, it is `invalid_params`. Cores advertise `run_literal` in
-`hello.features`; a relay to an added machine refuses the field, whatever its
-value but `false`, towards a core that does not (`needs_update`); a core that
-added this one is never asked to run (`machine_unknown`). Clients send it only to
+`hello.features`. A relay to an added machine checks `literal` as that core
+would (`invalid_params`) and refuses it towards a core that does not list the
+feature (`needs_update`), so neither a malformed nor an unknown `literal` reaches
+a core; a core that added this one is never asked to run (`machine_unknown`). Clients send it only to
 a core that lists it: an older core ignores it and may start a template in the
 program's place. The CLI has no flag for it.
 

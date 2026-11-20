@@ -295,9 +295,13 @@ fn a_literal_run_of_a_missing_program_fails_to_spawn_though_a_template_has_its_n
 }
 
 #[test]
-fn a_literal_run_takes_argv_not_a_line() {
+fn a_literal_run_takes_argv_not_a_line_and_a_boolean() {
     let s = session("0");
-    for params in [json!({"line": "echo hi", "literal": true}), json!({"literal": true})] {
+    for params in [
+        json!({"line": "echo hi", "literal": true}),
+        json!({"literal": true}),
+        json!({"argv": ["printf", "x"], "literal": "true"}),
+    ] {
         let reply = run_api(&s, params);
         assert_eq!(reply["error"]["data"]["kind"], "invalid_params", "{reply}");
     }
