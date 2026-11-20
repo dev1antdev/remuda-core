@@ -178,7 +178,8 @@ then looked at afresh before the paste (`status_mismatch`: nothing typed) and ag
 before Enter (`not_submitted`: the text may have reached the terminal and the send
 held back its own Enter, though a key a person pressed meanwhile still goes, so read
 the terminal before sending again). Each look is the holder's answer to that very
-request, never an earlier sample. It narrows, it cannot close: between a look and the
+request, never an earlier sample (a holder older than this release may, once,
+right after the core retook its link). It narrows, it cannot close: between a look and the
 write, and for a program that stops reading while still in front, what was typed
 goes to whatever reads the terminal next. Cores advertise `send_foreground` in `hello.features`; a relay
 refuses the field towards a core that does not (`needs_update`). Clients send it

@@ -262,6 +262,10 @@ impl Holder {
                 }
                 proto::FOREGROUND => {
                     let mut st = self.lock();
+                    // Read late, after a newer core said hello: its reply would answer a lookup of that core's.
+                    if st.core.as_ref().is_none_or(|c| c.generation != generation) {
+                        continue;
+                    }
                     let pgid = st.terms.get(&id).filter(|t| t.exit.is_none()).map_or(-1, |t| t.pty.foreground());
                     self.to_core(&mut st, &proto::json_frame(proto::FOREGROUND_IS, id, &proto::Foreground { pgid }));
                 }

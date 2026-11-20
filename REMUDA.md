@@ -111,9 +111,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   it types only while that process group leads the terminal — refused as `status_mismatch` when the
   last look already saw another, then looked at afresh before the paste (refused `status_mismatch`,
   nothing typed, or `cancelled` if the caller left) and again before Enter (refused `not_submitted`,
-  its Enter held back) — so an agent that left while the send waited for a person's draft
-  never has its message run by the shell behind it; a relay refuses the field towards a core without
-  the feature (`needs_update`). Ours: `remuda-core/src/front.rs` (`send_for`, `guard`, `last_seen`,
+  its Enter held back) — so an agent that left while the send waited for a person's draft never has
+  its message run by the shell behind it; a relay refuses the field towards a core without the
+  feature (`needs_update`). Ours: `remuda-core/src/front.rs` (`send_for`, `guard`, `last_seen`,
   `in_front`, `Asked`, `answering`, `link_ended`, with their tests) and `send_foreground_refused`
   with the shared `older` in `remote/remuda.rs` (with its test); in upstream's files the `Front`
   step and its arm in `input.rs`'s `type_in` (a refusal still ends the step's turn and hands the
@@ -122,11 +122,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   request sent before its lookup is noted with the holder asked (none noted without a link); in
   `runtime.rs` the waiting lookups typed `front::Asked`, a reply answering only the oldest lookup
   asked of its holder (`front::answering`, where it answered every lookup waiting) and a holder's
-  ended link dropping its lookups (`front::link_ended`), so a look is never an earlier sample; the
-  param in `api/types.rs`, `send_for` with its description, the `not_submitted` and `needs_update`
-  errors and the feature in `api.rs`, the two refusal calls in `remote.rs`, `mod front;` in
-  `lib.rs`, a paragraph in `schema/README.md`, the generated schema; the end-to-end test is ours, in
-  `tests/remuda.rs`.
+  ended link dropping its lookups (`front::link_ended`), and in `holder.rs`'s `FOREGROUND` arm the
+  reply skipped for a command read after a newer core's hello, as `GOODBYE` does, so a look is never
+  an earlier sample; the param in `api/types.rs`, `send_for` with its description, the
+  `not_submitted` and `needs_update` errors and the feature in `api.rs`, the two refusal calls in
+  `remote.rs`, `mod front;` in `lib.rs`, a paragraph in `schema/README.md`, the generated schema;
+  the end-to-end test is ours, in `tests/remuda.rs`.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
