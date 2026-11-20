@@ -202,6 +202,7 @@ impl Holder {
                 build: crate::client::build_id(),
                 login_session: self.login_session,
                 draining: self.draining.load(std::sync::atomic::Ordering::SeqCst),
+                own_replies: true,
                 previous: st.previous.into(),
                 terminals: ids
                     .iter()

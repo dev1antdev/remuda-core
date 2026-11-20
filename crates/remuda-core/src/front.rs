@@ -5,7 +5,7 @@ use crate::input::{Sent, Step};
 use crate::rpc::RpcError;
 use crate::runtime::Core;
 use crate::terminals::Terminal;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tokio::sync::oneshot;
 
 /// The lookups waiting on each terminal's foreground, each with the holder asked. A holder answers in the order it
@@ -31,6 +31,15 @@ pub(crate) fn link_ended(asked: &mut Asked, holder: &str) {
     });
 }
 
+/// Notes a holder just linked that answers a lookup only on the link that asked it.
+pub(crate) fn linked(own_replies: &mut HashSet<String>, welcome: &crate::holder_proto::Welcome) {
+    if welcome.own_replies {
+        own_replies.insert(welcome.instance.clone());
+    } else {
+        own_replies.remove(&welcome.instance);
+    }
+}
+
 /// Puts a look at the terminal's foreground before the paste and again before its submit, the last step.
 pub(crate) fn guard(steps: &mut Vec<Step>, pid: i32) {
     let submit = steps.len().saturating_sub(1);
@@ -45,6 +54,20 @@ pub(crate) fn last_seen(t: &Terminal, pid: i32) -> Result<(), RpcError> {
         Some(seen) if seen.pid != pid => Err(moved(t.id(), pid, seen.pid, false)),
         _ => Ok(()),
     }
+}
+
+/// A holder of an older build may answer a lookup on a link that did not ask it, after the core retook its link: its
+/// terminals take no guarded send.
+fn holder_answers_its_own(id: u32, own_replies: Option<bool>) -> Result<(), RpcError> {
+    if own_replies == Some(false) {
+        let address = crate::terminals::address(id);
+        return Err(RpcError::new(
+            "needs_update",
+            format!("{address} runs in an older rc's holder, whose foreground replies a send cannot rely on"),
+            "nothing was typed; a terminal started since rc was updated takes it",
+        ));
+    }
+    Ok(())
 }
 
 /// Before the paste: `status_mismatch`, nothing typed. After it: `not_submitted`, the text left where it went.
@@ -76,6 +99,10 @@ impl Core {
         only_if: Option<&str>,
         front: Option<i32>,
     ) -> Result<Sent, RpcError> {
+        if front.is_some() {
+            let st = self.lock();
+            holder_answers_its_own(id, st.link(id).map(|l| st.own_replies.contains(&l.instance)))?;
+        }
         self.send_message(id, text, force, only_if, front, false).await
     }
 
@@ -111,6 +138,22 @@ mod tests {
         answering(&mut asked, 7, "h1").unwrap().send(12).unwrap();
         assert_eq!(send.try_recv(), Ok(12));
         assert!(asked.is_empty());
+    }
+
+    #[test]
+    fn a_stray_reply_shifts_the_order_so_an_older_holder_takes_no_guarded_send() {
+        let mut asked = Asked::new();
+        let mut lookup = || {
+            let (tx, rx) = oneshot::channel();
+            asked.entry(7).or_default().push(("old".to_string(), tx));
+            rx
+        };
+        let (mut watcher, mut send) = (lookup(), lookup());
+        answering(&mut asked, 7, "old").unwrap().send(1).unwrap(); // a reply no lookup here asked for
+        answering(&mut asked, 7, "old").unwrap().send(11).unwrap(); // the watcher's, sampled earlier
+        assert_eq!((watcher.try_recv(), send.try_recv()), (Ok(1), Ok(11)), "the send took another lookup's sample");
+        assert_eq!(holder_answers_its_own(7, Some(false)).unwrap_err().kind, "needs_update");
+        assert!(holder_answers_its_own(7, Some(true)).is_ok() && holder_answers_its_own(7, None).is_ok());
     }
 
     #[test]

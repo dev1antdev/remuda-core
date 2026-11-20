@@ -202,6 +202,7 @@ async fn handover_carries_held_replies_and_answers_including_final_holder_output
             build: crate::client::build_id(),
             login_session: None,
             draining: false,
+            own_replies: false,
             previous: "handover".into(),
             terminals: vec![proto::HeldTerminal { id, pid: 0, cols: 80, rows: 24, exit: None }],
         };
@@ -503,6 +504,7 @@ fn a_new_holder_of_another_build_reports_both_identities() {
             build: "other-build".into(),
             login_session: None,
             draining: false,
+            own_replies: false,
             previous: "none".into(),
             terminals: vec![],
         };
@@ -550,6 +552,7 @@ fn on_fake_holder(root: &std::path::Path, answers: &[&str]) -> (Arc<Core>, u32, 
         build: crate::client::build_id(),
         login_session: None,
         draining: false,
+        own_replies: false,
         previous: "crash".into(),
         terminals: vec![held],
     };
@@ -747,6 +750,7 @@ fn status_events_on_crash_adoption(tail: &[u8]) -> Vec<Value> {
         build: crate::client::build_id(),
         login_session: None,
         draining: false,
+        own_replies: false,
         previous: "crash".into(),
         terminals: vec![proto::HeldTerminal { id, pid: 1, cols: 80, rows: 24, exit: None }],
     };

@@ -59,6 +59,8 @@ pub struct State {
     pub queues: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub sends: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub foreground: crate::front::Asked,
+    /// The holders that answer a foreground lookup only on the link that asked it (`front.rs`).
+    pub own_replies: std::collections::HashSet<String>,
     /// Waits matching output: they get every byte viewers get.
     pub output_watch: HashMap<u32, Vec<tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>,
     /// The turn of each caller's last send to a terminal, until a bare wait reports it.
@@ -418,6 +420,7 @@ impl Core {
         let (adopted, nudge) = {
             let mut st = self.lock();
             st.disconnected.remove(&welcome.instance);
+            crate::front::linked(&mut st.own_replies, &welcome);
             st.holders.push(link);
             let adopted = self.adopt(&mut st, &welcome, tails);
             self.save(&st);
