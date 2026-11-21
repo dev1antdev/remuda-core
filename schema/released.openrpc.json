@@ -1669,7 +1669,7 @@
       "name": "Apache-2.0"
     },
     "title": "remuda-core",
-    "version": "0.2.3"
+    "version": "0.2.4"
   },
   "methods": [
     {
@@ -2606,12 +2606,12 @@
           }
         },
         {
-          "description": "Scrollback lines to show first (main screen only).",
+          "description": "Scrollback lines to show first (main screen only; past the stream's queue the core keeps the newest that fit).",
           "name": "history",
           "required": false,
           "schema": {
             "default": 0,
-            "description": "Scrollback lines to show first (main screen only).",
+            "description": "Scrollback lines to show first (main screen only; past the stream's queue the core keeps the newest that fit).",
             "format": "uint",
             "minimum": 0,
             "type": "integer"
