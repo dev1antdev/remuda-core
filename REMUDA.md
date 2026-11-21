@@ -216,6 +216,21 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   line, 123 columns being past the width, so that whole literal is ours), the feature in `api.rs`,
   the `foreground` row and a paragraph in `schema/README.md`'s "Fields newer cores add", the
   generated schema; the end-to-end test is ours, in `tests/remuda.rs`.
+- `terminal.attach`'s first paint is bounded by the stream's queue: `first_paint` asks our
+  `paint::within` (`remuda-core/src/paint.rs`) for the newest history rows that fit
+  `wire::MAX_PENDING` (4 MiB of pending DATA), the oldest cut, so the screen and the state always go
+  with it; and `history` itself is taken at most as far as the rows the painter replays
+  (`kept_history_rows` and `primary_screen`, ours in `ghostty-vt/src/styled.rs`: the primary screen,
+  restored once, which a full-screen program hides, so a client's number can neither wrap the painter's
+  `u32` nor make the cut search rows that are not there) — a paint past the queue
+  was dropped whole and the attach never checked, so a densely coloured history left a viewer blank.
+  A screen that alone passes the queue still cannot be sent: there is no history left to cut. Ours:
+  `paint.rs` with `viewers.rs`'s `first_paint`, and `paint_with` in `ghostty-vt/src/lib.rs` (the
+  prepared primary above goes in, so a candidate restores nothing); in upstream's files `paint`
+  delegating to it and `mod paint;` in `lib.rs`; the `history` param, the generated schema and
+  `docs/commands.md`, one
+  paragraph in `schema/README.md`; the test is ours, in `tests/remuda.rs`. A core older than this on
+  an added machine still drops the paint whole, so a blank viewer there means an update.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 

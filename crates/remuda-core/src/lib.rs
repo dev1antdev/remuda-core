@@ -17,6 +17,7 @@ pub mod keys;
 pub mod locale;
 pub mod machines;
 pub mod notes;
+mod paint;
 pub mod paths;
 pub mod picker;
 pub mod platform;

@@ -502,11 +502,20 @@ pub(crate) fn first_paint(st: &State, id: u32, history: usize) -> Vec<u8> {
     #[cfg(test)]
     tests::PAINTS.with(|n| n.set(n.get() + 1));
     let screen = &st.screens[&id];
-    let mut paint = paint_state(st, id, screen.paint(history));
-    if let Some(continuation) = screen.continuation() {
-        paint.extend(continuation);
-    }
-    paint
+    // A full-screen program's paint replays its hidden primary screen; restoring that copy once keeps every
+    // candidate below from restoring it again.
+    let primary = (history > 0).then(|| screen.primary_screen()).flatten();
+    // Past the rows the painter replays, the count wraps as u32 and the cut below stops being monotone;
+    // asking for more than there are is the same as asking for all of them.
+    let kept = primary.as_ref().map_or_else(|| screen.kept_history_rows(), |primary| primary.kept_history_rows());
+    let history = history.min(kept as usize);
+    crate::paint::within(history, |rows| {
+        let mut paint = paint_state(st, id, screen.paint_with(rows, primary.as_ref()));
+        if let Some(continuation) = screen.continuation() {
+            paint.extend(continuation);
+        }
+        paint
+    })
 }
 
 fn paint_state(st: &State, id: u32, screen: Vec<u8>) -> Vec<u8> {

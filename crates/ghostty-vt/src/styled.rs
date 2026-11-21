@@ -81,6 +81,23 @@ impl Terminal {
         (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
     }
 
+    /// The primary screen a full-screen program hides, restored and left active, as `paint` replays it:
+    /// None on the main screen. A caller painting candidate history counts takes it once, through
+    /// `paint_with`, instead of restoring the terminal for each.
+    pub fn primary_screen(&self) -> Option<Terminal> {
+        if !self.alt_screen() {
+            return None;
+        }
+        let mut primary = Self::restore(&self.snapshot()?, usize::MAX)?;
+        primary.write(b"\x18\x1b[?1049l");
+        Some(primary)
+    }
+
+    /// The rows above the screen that a paint replays.
+    pub fn kept_history_rows(&self) -> u32 {
+        self.history_rows()
+    }
+
     /// The text of the last `n` rows (the screen down to its last row with text,
     /// then history above it on the main screen), oldest first, as `plain_text`
     /// reads it: soft-wrapped rows joined, trailing spaces cut.

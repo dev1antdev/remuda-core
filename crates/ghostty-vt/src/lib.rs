@@ -702,6 +702,13 @@ impl Terminal {
     /// scrollback lines (main screen only), then the screen with its modes,
     /// cursor and title.
     pub fn paint(&self, history: usize) -> Vec<u8> {
+        self.paint_with(history, None)
+    }
+
+    /// `paint`, with the primary screen a full-screen program hides already restored and left active by
+    /// [`primary_screen`](Self::primary_screen): a caller that paints candidate history counts restores the
+    /// terminal once rather than once a candidate.
+    pub fn paint_with(&self, history: usize, primary: Option<&Terminal>) -> Vec<u8> {
         let (cols, rows) = self.size();
         let last = (cols.saturating_sub(1), rows.saturating_sub(1) as u32);
         // A soft reset leaves mouse, focus, paste, sync and key modes alone: turn
@@ -714,12 +721,19 @@ impl Terminal {
         // The formatter only exposes the active screen. Leave alternate mode
         // on a snapshot so the viewer also gets its hidden primary screen,
         // without changing the live terminal or consuming its partial VT input.
-        if self.alt_screen()
-            && let Some(snapshot) = self.snapshot()
-            && let Some(mut primary) = Self::restore(&snapshot, usize::MAX)
-        {
-            primary.write(b"\x18\x1b[?1049l");
-            out = primary.paint(history);
+        if self.alt_screen() {
+            let restored = primary
+                .is_none()
+                .then(|| {
+                    self.snapshot().and_then(|snapshot| Self::restore(&snapshot, usize::MAX)).map(|mut primary| {
+                        primary.write(b"\x18\x1b[?1049l");
+                        primary
+                    })
+                })
+                .flatten();
+            if let Some(primary) = primary.or(restored.as_ref()) {
+                out = primary.paint(history);
+            }
         }
         let available = self.history_rows();
         if history > 0 && available > 0 && !self.alt_screen() {

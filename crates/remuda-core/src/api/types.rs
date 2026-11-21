@@ -425,7 +425,7 @@ pub struct AttachParams {
     #[arg(skip)]
     #[serde(default)]
     pub keep_size: bool,
-    /// Scrollback lines to show first (main screen only).
+    /// Scrollback lines to show first (main screen only; past the stream's queue the core keeps the newest that fit).
     #[arg(long, default_value_t = 0)]
     #[serde(default)]
     pub history: usize,
