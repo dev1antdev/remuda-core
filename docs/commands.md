@@ -84,7 +84,7 @@ Arguments:
 Options:
       --json               JSON output even in a terminal
       --observe            Watch only: never type or resize
-      --history <HISTORY>  Scrollback lines to show first (main screen only) [default: 0]
+      --history <HISTORY>  Scrollback lines to show first (main screen only; past the stream's queue the core keeps the newest that fit) [default: 0]
   -h, --help               Print help
 ```
 

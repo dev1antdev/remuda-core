@@ -65,7 +65,11 @@ Channel 0 carries JSON-RPC both ways. Calls on it run side by side.
 (the current screen, optional history, the latest status report and title,
 and `CSI ?9001h` or `l`: whether the program asked for win32-input-mode,
 as Windows' ConPTY does when it starts), then the program's raw output,
-minus terminal queries the core already answered. The core never encodes
+minus terminal queries the core already answered. The first paint keeps the
+newest history rows that fit the stream's queue (4 MiB of pending DATA, see
+Flow control): past that, the oldest history is dropped, so the screen and the
+state still reach the viewer. A screen that alone passes the queue cannot be
+sent at all: the stream drops a paint that size whole. The core never encodes
 keys: a viewer that honors 9001 sends key events in that format itself.
 The viewer sends keys as DATA on the same channel, and RESIZE,
 FOCUS and FACTS as it changes. The last active viewer sets the size

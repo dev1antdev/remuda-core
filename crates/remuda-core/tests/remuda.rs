@@ -505,3 +505,57 @@ fn the_foreground_tells_when_its_process_was_created_as_ps_does() {
     };
     assert!(shell_started <= started, "the shell began at {shell_started}, sleep at {started}");
 }
+
+/// A first paint past a stream's queue is dropped whole, and the viewer would get nothing: the newest
+/// history rows fill the queue instead, the oldest going first, and the screen always arrives.
+#[test]
+fn a_first_paint_past_the_queue_cuts_the_oldest_history_and_brings_the_screen() {
+    let s = Session::new();
+    let config = s.root.join("config/remuda-core/config.toml");
+    std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+    std::fs::write(&config, "history_mb = 64\n").unwrap();
+    // 4000 rows of 80 cells, every cell its own colour: past wire::MAX_PENDING whole, whatever the formatter
+    // makes of a cell's style.
+    let cells = "$(printf '\\033[38;2;255;0;0mX\\033[38;2;0;255;0mY%.0s' $(seq 1 38))";
+    let script = format!(
+        "row={cells}; i=0; while [ $i -lt 4000 ]; do printf '%04d%s\\n' \"$i\" \"$row\"; i=$((i+1)); done; printf 'READY\\n'; sleep 100"
+    );
+    let t = run(&s, &["sh", "-c", &script]);
+    wait_until_for("the whole history printed", Duration::from_secs(60), || {
+        s.json(&["read", &t])["text"].as_str().unwrap_or_default().contains("READY")
+    });
+    let mut v = Viewer::attach(&s, &t, 80, 24, json!({"history": 4000}));
+    v.shows("READY");
+    v.drain(Duration::from_millis(300));
+    assert!(v.received <= wire::MAX_PENDING, "the paint went past the queue: {} bytes", v.received);
+    assert!(
+        v.received > wire::MAX_PENDING - (256 << 10),
+        "the newest history did not fill the queue: {} bytes",
+        v.received
+    );
+    let raw = String::from_utf8_lossy(&v.raw);
+    assert!(!raw.contains("0000"), "the oldest history did not go first");
+    assert!(raw.contains("1300"), "the newest history is not what reached the viewer");
+    // A request past the rows the terminal keeps is the same as asking for all of them, not a search over
+    // numbers that are not there.
+    let mut huge = Viewer::attach(&s, &t, 80, 24, json!({"history": u64::MAX}));
+    huge.shows("READY");
+    huge.drain(Duration::from_millis(300));
+    assert!(huge.received <= wire::MAX_PENDING, "a huge request went past the queue: {} bytes", huge.received);
+}
+
+/// A full-screen program keeps the primary screen hidden; a viewer that asks for history still gets that
+/// screen's rows replayed above it, and the alternate screen's own count of none cuts nothing.
+#[test]
+fn a_first_paint_while_a_full_screen_program_runs_replays_the_primary_history() {
+    let s = Session::new();
+    let script = "i=0; while [ $i -lt 300 ]; do echo log-$i; i=$((i+1)); done; printf '\\033[?1049h'; sleep 100";
+    let t = run(&s, &["sh", "-c", script]);
+    wait_until_for("the full-screen program", Duration::from_secs(30), || {
+        s.json(&["read", &t, "--lines", "10"])["how"].as_str() == Some("screen")
+    });
+    let mut v = Viewer::attach(&s, &t, 80, 24, json!({"history": 400}));
+    v.drain(Duration::from_millis(500));
+    let raw = String::from_utf8_lossy(&v.raw);
+    assert!(raw.contains("log-0"), "the primary screen's history was not replayed above the full-screen one");
+}
