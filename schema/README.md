@@ -70,7 +70,9 @@ newest history rows that fit the stream's queue (4 MiB of pending DATA, see
 Flow control): past that, the oldest history is dropped, so the screen and the
 state still reach the viewer. A soft-wrapped row arrives as one line — no row
 break inside the wrap, and the row's width written out — so a viewer that finds
-text over its own rows crosses a word broken at the wrap. A screen that alone
+text over its own rows crosses a word broken at the wrap: where the viewer's
+grid is the terminal's (it set the size, or is told the grid before the paint),
+and no row that continues a wrap is blank. A screen that alone
 passes the queue cannot be sent at all: the stream drops a paint that size
 whole. The core never encodes keys: a viewer that honors 9001 sends key events
 in that format itself.

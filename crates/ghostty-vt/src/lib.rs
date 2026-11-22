@@ -647,15 +647,12 @@ impl Terminal {
         bar.total.saturating_sub(self.size().1 as u64) as u32
     }
 
-    /// A paint keeps every row's soft wrap: a wrapped row continues without a row break and its width is
-    /// written out, so a viewer's own find crosses a word broken at the wrap. Plain text joins the rows and
-    /// trims the trailing space instead.
     fn format(&self, emit: i32, selection: Option<&ffi::Selection>, extras: bool) -> Vec<u8> {
-        self.format_with(emit, selection, extras, true)
+        self.format_with(emit, selection, extras, emit == ffi::FORMAT_PLAIN)
     }
 
-    /// `unwrap`: soft-wrapped rows continue without a row break; without it a row is a line, and only a
-    /// plain read joined this way trims its trailing space.
+    /// `unwrap`: soft-wrapped rows continue without a row break, its width written out, so a viewer's own find
+    /// crosses a word broken at the wrap; `trim`: trailing space cut, a plain read's alone.
     fn format_with(&self, emit: i32, selection: Option<&ffi::Selection>, extras: bool, unwrap: bool) -> Vec<u8> {
         let screen = ffi::ScreenExtra {
             size: size_of::<ffi::ScreenExtra>(),
@@ -704,15 +701,17 @@ impl Terminal {
 
     /// Bytes that repaint this terminal on a fresh viewer: up to `history`
     /// scrollback lines (main screen only), then the screen with its modes,
-    /// cursor and title.
+    /// cursor and title. Rows a program soft-wrapped continue on without a row
+    /// break, so a viewer's own find crosses a word broken at the wrap.
     pub fn paint(&self, history: usize) -> Vec<u8> {
-        self.paint_with(history, None)
+        self.paint_with(history, None, true)
     }
 
     /// `paint`, with the primary screen a full-screen program hides already restored and left active by
     /// [`primary_screen`](Self::primary_screen): a caller that paints candidate history counts restores the
-    /// terminal once rather than once a candidate.
-    pub fn paint_with(&self, history: usize, primary: Option<&Terminal>) -> Vec<u8> {
+    /// terminal once rather than once a candidate. `wrap` joins the rows a program soft-wrapped, which takes a
+    /// viewer whose grid is this terminal's — one that set its size, or that was told the grid before the paint.
+    pub fn paint_with(&self, history: usize, primary: Option<&Terminal>, wrap: bool) -> Vec<u8> {
         let (cols, rows) = self.size();
         let last = (cols.saturating_sub(1), rows.saturating_sub(1) as u32);
         // A soft reset leaves mouse, focus, paste, sync and key modes alone: turn
@@ -736,14 +735,22 @@ impl Terminal {
                 })
                 .flatten();
             if let Some(primary) = primary.or(restored.as_ref()) {
-                out = primary.paint(history);
+                out = primary.paint_with(history, None, wrap);
             }
         }
         let available = self.history_rows();
         if history > 0 && available > 0 && !self.alt_screen() {
             let from = available.saturating_sub(history as u32);
-            if let Some(sel) = self.select(ffi::POINT_HISTORY, (0, from), (last.0, available - 1)) {
-                out.extend(self.format(ffi::FORMAT_VT, Some(&sel), false));
+            let join = wrap && self.joins_wraps(ffi::POINT_HISTORY, from, available - 1);
+            // An end on a spacer head would take in the wide character on the row below, which the screen owns:
+            // end a cell short, where it repeats nothing.
+            let end = if join && self.ends_on_a_spacer_head(ffi::POINT_HISTORY, available - 1) {
+                last.0.saturating_sub(1)
+            } else {
+                last.0
+            };
+            if let Some(sel) = self.select(ffi::POINT_HISTORY, (0, from), (end, available - 1)) {
+                out.extend(self.format_with(ffi::FORMAT_VT, Some(&sel), false, join));
                 // Push those lines up into the viewer's scrollback before painting the screen.
                 out.extend(b"\x1b[0m\r\n".iter().chain(&b"\n".repeat(rows as usize)));
                 out.extend(b"\x1b[H\x1b[2J");
@@ -754,11 +761,20 @@ impl Terminal {
             out.extend(b"\x1b[?1049h\x1b[!p");
         }
         if let Some(sel) = self.select(ffi::POINT_ACTIVE, (0, 0), last) {
-            let screen = self.format(ffi::FORMAT_VT, Some(&sel), true);
+            let join = wrap && self.joins_wraps(ffi::POINT_ACTIVE, 0, last.1);
+            let screen = self.format_with(ffi::FORMAT_VT, Some(&sel), true, join);
             // Alternate-screen aliases can disagree with the active screen. Replay
             // only the screen chosen above, not the formatter's independent mode bits.
             // Synchronized output belongs to the old viewer and would freeze a new one.
-            out.extend(strip(&screen, &[b"\x1b[?2026h", b"\x1b[?47h", b"\x1b[?1047h", b"\x1b[?1049h"]));
+            // Autowrap off is the program's, but the rows above were drawn while it is on, a joined row
+            // continuing only by wrapping: it goes back with the last cell, not before the first.
+            out.extend(strip(
+                &screen,
+                &[b"\x1b[?2026h", b"\x1b[?47h", b"\x1b[?1047h", b"\x1b[?1049h", b"\x1b[?7h", b"\x1b[?7l"],
+            ));
+            if !self.dec_mode(7) {
+                out.extend(b"\x1b[?7l");
+            }
         }
         let title = self.title();
         if !title.is_empty() {
@@ -780,7 +796,9 @@ impl Terminal {
             out = primary.replay();
             out.extend(b"\x1b[0m\r\n");
         }
-        out.extend(self.format(ffi::FORMAT_VT, None, false));
+        let rows = self.history_rows() + u32::from(self.size().1);
+        let join = self.joins_wraps(crate::wrap::ALL_ROWS, 0, rows.saturating_sub(1));
+        out.extend(self.format_with(ffi::FORMAT_VT, None, false, join));
         while out.last().is_some_and(|b| b" \r\n".contains(b)) {
             out.pop();
         }
@@ -843,6 +861,7 @@ fn alloc_call(f: impl FnOnce(*mut *mut u8, *mut usize) -> i32) -> Option<Vec<u8>
 }
 
 mod styled;
+mod wrap;
 
 #[cfg(test)]
 mod tests;
