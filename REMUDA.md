@@ -233,16 +233,17 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   an added machine still drops the paint whole, so a blank viewer there means an update.
 - The paint keeps the rows a program soft-wrapped: `paint_with` joins them (`unwrap`, the row's width written
   out) so a client's own find crosses a word broken at the wrap — in the history, on the screen and in
-  `replay` — and leaves them as rows where the grid forbids it: a row that continues a wrap and holds no text
-  (the formatter writes it no cells, so its one break would stand for two rows), a client whose grid may not
-  be this terminal's (one that neither sets the size nor is told it before the paint), and a history block
-  ending on a wide character's spacer (the formatter moves such an end onto the glyph below, which the screen
-  would then paint twice). Autowrap off is the program's, but the rows are drawn while it is on, a joined row
-  continuing only by wrapping: it goes back after the last cell. Ours: `ghostty-vt/src/wrap.rs`
+  `replay` — and leaves them as rows where the grid forbids it: a row whose wrap flag and the row below it
+  disagree, or that holds no text (the formatter writes a blank row no cells, so its one break would stand
+  for two rows), a client whose own width is not the grid and that was not told it before the paint, and a
+  history block ending on a wide character's spacer (the formatter moves such an end onto the glyph below,
+  which the screen would then paint twice). Autowrap off is the program's, but the rows are drawn while it is
+  on, a joined row continuing only by wrapping: it goes back after the last cell. Ours: `ghostty-vt/src/wrap.rs`
   (`joins_wraps`, `ends_on_a_spacer_head`, `ALL_ROWS`, with their tests) and `viewers.rs`'s
   `Viewer::knows_the_grid` with `wraps_join`; in upstream's files the `unwrap` line in `format_with`,
   `mod wrap;` and `paint_with` in `ghostty-vt/src/lib.rs`, and a sentence in `schema/README.md`'s attach
-  paragraph. A core older than this on an added machine still paints a soft-wrapped row as two lines.
+  paragraph, where a viewer applies a paint at the grid it set or was told. A core older than this on an
+  added machine still paints a soft-wrapped row as two lines.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
