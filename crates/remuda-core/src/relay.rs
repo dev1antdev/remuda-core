@@ -194,7 +194,7 @@ impl Relay {
         if let Some(keep) = self.apc.take() {
             screen.drop_responses_after(keep);
         }
-        let paint = screen.paint(0);
+        let paint = screen.paint_with(0, None, false);
         let mut out = bytes[..n].to_vec();
         out.extend(self.feed(screen, &bytes[n..]));
         (out, Some((n, paint)))

@@ -4,7 +4,7 @@
 use crate::{Terminal, ffi};
 use std::ffi::c_void;
 
-const ROW_WRAP_CONTINUATION: i32 = 2;
+const ROW_WRAP: i32 = 1;
 const CELL_HAS_TEXT: i32 = 4;
 const CELL_WIDE: i32 = 3;
 const WIDE_SPACER_HEAD: i32 = 3;
@@ -20,14 +20,14 @@ unsafe extern "C" {
 }
 
 impl Terminal {
-    /// Whether row `y` continues the soft wrap of the row above it.
-    fn continues(&self, tag: i32, y: u32) -> bool {
+    /// Whether the row below row `y` continues it: the formatter leaves the break after such a row to the wrap.
+    fn wraps(&self, tag: i32, y: u32) -> bool {
         let Some(at) = self.grid_ref(tag, 0, y) else { return false };
         let mut row = 0u64;
         if unsafe { ghostty_grid_ref_row(&at, &mut row) } != ffi::SUCCESS {
             return false;
         }
-        row_data::<bool>(row, ROW_WRAP_CONTINUATION)
+        row_data::<bool>(row, ROW_WRAP)
     }
 
     /// Whether any cell of row `y` holds text.
@@ -45,11 +45,11 @@ impl Terminal {
         false
     }
 
-    /// Whether the rows from..=to may be painted with their soft wraps joined: the formatter writes no cells for a
-    /// blank row, so a blank row that continues a wrap would take none of its own, and the single break before the
-    /// next text would stand for two rows.
+    /// Whether the rows from..=to may be painted with their soft wraps joined: the break after a wrapped row is
+    /// left to the wrap, and a row with no text writes no cells to carry it, so the one break the formatter writes
+    /// for such a blank row would stand for two rows.
     pub(crate) fn joins_wraps(&self, tag: i32, from: u32, to: u32) -> bool {
-        (from..=to).all(|y| !self.continues(tag, y) || self.holds_text(tag, y))
+        (from..to).all(|y| !self.wraps(tag, y) || self.holds_text(tag, y + 1))
     }
 
     /// Whether the last cell of row `y` is the spacer of a wide character living on the row below: a paint ending
@@ -116,6 +116,16 @@ mod tests {
         // The wrap's continuation was erased: the row takes no text, but it still takes a row.
         t.write(b"0123456789abc\x1b[2K\r\nnext");
         let mut fresh = Terminal::new(10, 3, 1 << 20);
+        fresh.write(&t.paint(0));
+        assert_eq!(fresh.screen_rows(), t.screen_rows());
+    }
+
+    #[test]
+    fn a_blank_row_inserted_after_a_wrap_keeps_its_row() {
+        let mut t = Terminal::new(10, 4, 1 << 20);
+        // The row the wrap ran into was inserted away: the row above keeps its wrap, the new one takes no text.
+        t.write(b"0123456789abc\x1b[2;1H\x1b[L");
+        let mut fresh = Terminal::new(10, 4, 1 << 20);
         fresh.write(&t.paint(0));
         assert_eq!(fresh.screen_rows(), t.screen_rows());
     }

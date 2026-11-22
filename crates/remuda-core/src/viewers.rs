@@ -51,10 +51,11 @@ impl Viewer {
         !self.observe && !self.keep_size
     }
 
-    /// Whether the grid this core paints is this viewer's own width: it set the size, or it is told the grid
-    /// before each paint. Only then may the paint join the rows a program soft-wrapped.
-    fn knows_the_grid(&self) -> bool {
-        self.sets_size() || self.resize_notifications
+    /// Whether this viewer's own width is the grid a paint is drawn at: it is the size the terminal has, or it
+    /// is told the grid before each paint. Only then may the paint join the rows a program soft-wrapped, which
+    /// takes a viewer of the terminal's own width.
+    fn knows_the_grid(&self, grid: (u16, u16)) -> bool {
+        self.resize_notifications || self.size == grid
     }
 }
 
@@ -113,7 +114,9 @@ impl Core {
         if !req.observe {
             self.apply_size(&mut st, id);
         }
-        let wrap = st.viewers[&id].last().is_some_and(Viewer::knows_the_grid);
+        let t = &st.reg.terminals[&id];
+        let grid = (t.cols, t.rows);
+        let wrap = st.viewers[&id].last().is_some_and(|v| v.knows_the_grid(grid));
         let paint = first_paint(&st, id, req.history, wrap);
         st.viewers.get_mut(&id).unwrap().last_mut().unwrap().repaint_pending = false;
         conn.with(|out| {
@@ -525,9 +528,11 @@ pub(crate) fn first_paint(st: &State, id: u32, history: usize, wrap: bool) -> Ve
     })
 }
 
-/// Whether every viewer of the terminal that shares one paint knows the grid, so the rows may be joined.
+/// Whether every viewer of the terminal that shares one paint is at the grid, so the rows may be joined.
 pub(crate) fn wraps_join(st: &State, id: u32) -> bool {
-    st.viewers.get(&id).is_none_or(|viewers| viewers.iter().all(Viewer::knows_the_grid))
+    let t = &st.reg.terminals[&id];
+    let grid = (t.cols, t.rows);
+    st.viewers.get(&id).is_none_or(|viewers| viewers.iter().all(|v| v.knows_the_grid(grid)))
 }
 
 fn paint_state(st: &State, id: u32, screen: Vec<u8>) -> Vec<u8> {
