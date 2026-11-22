@@ -111,7 +111,7 @@ impl Terminal {
         }
         let last = self.size().0.saturating_sub(1);
         let Some(window) = self.select(SCREEN, (0, top), (last, bottom - 1)) else { return Vec::new() };
-        let text = self.format_with(ffi::FORMAT_PLAIN, Some(&window), false, true);
+        let text = self.format_with(ffi::FORMAT_PLAIN, Some(&window), false, true, true);
         String::from_utf8_lossy(&text).split('\n').map(str::to_string).collect()
     }
 

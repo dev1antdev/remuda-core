@@ -272,6 +272,35 @@ fn grapheme_clustering_is_on_like_ghostty() {
 }
 
 #[test]
+fn a_painted_history_keeps_its_soft_wraps() {
+    let mut t = Terminal::new(20, 3, 1 << 20);
+    // The word straddles the wrap; it is history by the time the paint is asked for.
+    t.write(b"0123456789abcdefghijKLMNOP\r\none\r\ntwo\r\nthree\r\n");
+    let mut fresh = Terminal::new(20, 3, 1 << 20);
+    fresh.write(&t.paint(3));
+    assert!(fresh.plain_text().contains("0123456789abcdefghijKLMNOP"), "{:?}", fresh.plain_text());
+}
+
+#[test]
+fn a_painted_screen_keeps_its_soft_wraps() {
+    let mut t = Terminal::new(20, 3, 1 << 20);
+    t.write(b"0123456789abcdefghijKLMNOP");
+    let mut fresh = Terminal::new(20, 3, 1 << 20);
+    fresh.write(&t.paint(0));
+    assert!(fresh.plain_text().contains("0123456789abcdefghijKLMNOP"), "{:?}", fresh.plain_text());
+}
+
+#[test]
+fn a_painted_history_whose_wrap_falls_on_a_wide_character_stays_one_line() {
+    let head = "a".repeat(19);
+    let mut t = Terminal::new(20, 3, 1 << 20);
+    t.write(format!("{head}\u{4e16}\u{754c}\r\none\r\ntwo\r\n").as_bytes());
+    let mut fresh = Terminal::new(20, 3, 1 << 20);
+    fresh.write(&t.paint(2));
+    assert!(fresh.plain_text().contains(&format!("{head}\u{4e16}\u{754c}")), "{:?}", fresh.plain_text());
+}
+
+#[test]
 fn a_replay_carries_the_text_and_colors_but_not_the_programs_modes_or_title() {
     let mut old = Terminal::new(80, 24, 1 << 20);
     old.write(b"\x1b[?1000h\x1b[?2004h\x1b]2;old title\x1b\\");

@@ -231,6 +231,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `docs/commands.md`, one
   paragraph in `schema/README.md`; the test is ours, in `tests/remuda.rs`. A core older than this on
   an added machine still drops the paint whole, so a blank viewer there means an update.
+- The paint's rows keep their soft wraps: `format` in `ghostty-vt/src/lib.rs` asks the formatter to
+  unwrap (`unwrap` for every paint, `trim` plain text's alone), so `paint`'s history and screen, and
+  `replay`, run a soft-wrapped row on into its continuation with no `\r\n` and write the row's width
+  out — a viewer's find, over the rows xterm marks `isWrapped`, crosses a word broken at the wrap
+  where it saw two hard lines before. Ours: `format` and `format_with` there, with their tests in
+  `ghostty-vt/src/tests.rs`; `screen_rows` still answers a row a line, and plain text still joins.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 
