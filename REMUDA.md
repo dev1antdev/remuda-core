@@ -82,8 +82,8 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
   colors as SGR, each starting with a style reset, history above the screen on the main screen
   only (a full-screen program is not scrolled for it), as many of the newest rows as the caller asks
-  for while their JSON fits half a frame (8 MiB) and at most 20000 of them — a read holds the core's
-  lock while it encodes, and that is as far as a client's find asks: a page's find reads deeper than
+  for while their JSON fits half a frame (8 MiB) and at most 5000 of them — a read holds the core's
+  lock while it encodes, about what a paint costs, and that is as far as a client's find asks: a page's find reads deeper than
   its own rows, and `complete` says only that rows were really dropped; a finished terminal answers
   its plain text. A core older than this on an added machine still stops at 1000 rows and calls the
   read incomplete whenever more are asked. The rows are encoded cell by cell from

@@ -172,8 +172,14 @@ fn read_in_vt_stops_at_its_row_bound_and_says_so() {
     wait_until("printed", || text(&s, &t).ends_with("END"));
     let r = s.json(&["read", "--format", "vt", "--lines", "100000", &t]);
     let rows = r["text"].as_str().unwrap().split('\n').count();
-    assert_eq!(rows, 20_000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, "one read's row bound");
+    assert_eq!(rows, 5_000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, "one read's row bound");
     assert_eq!(r["complete"].as_bool(), Some(false), "the rows past the bound were not read");
+    // The bound is not a lie about short histories: asking past it with nothing there is complete.
+    let short =
+        s.json(&["run", "--bg", "sh", "-c", "printf 'only\\n'; sleep 100"])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &short).contains("only"));
+    let nothing = s.json(&["read", "--format", "vt", "--lines", "20001", &short]);
+    assert_eq!(nothing["complete"].as_bool(), Some(true), "every row there was read");
 }
 
 #[test]

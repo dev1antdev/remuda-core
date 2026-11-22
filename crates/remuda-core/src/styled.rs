@@ -18,9 +18,10 @@ pub enum ReadFormat {
 
 /// At most this much JSON, half a frame: a reply past a frame ends the line it travels on.
 const BUDGET: usize = crate::wire::MAX_PAYLOAD / 2;
-/// At most this many history rows one read encodes: they are encoded under the core's lock, and this is
-/// as far above the screen as a client's find is ever likely to ask (remuda's `MaxScrollbackRows`).
-const MAX_ROWS: usize = 20_000;
+/// At most this many history rows one read encodes: they are encoded under the core's lock, so this keeps
+/// one read to about what a paint costs, and it is as far above the screen as a client's find asks
+/// (remuda reads 5000 rows for a find, its own rows being 2000).
+const MAX_ROWS: usize = 5_000;
 
 /// The live screen with up to `lines` of history above it (main screen only, the newest rows whose
 /// JSON fits the budget and at most `MAX_ROWS` of them), with colors. None for a finished terminal:
@@ -30,13 +31,15 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
     let full_screen = screen.alt_screen();
     let history = screen.styled_history();
+    // Asked for more rows than the bound while there were more than that to give: the rest is unread.
+    let capped = lines.min(history.len()) > MAX_ROWS;
     let wanted = lines.min(MAX_ROWS);
     let Some((rows, kept, budget_cut)) = fit(screen.styled_screen(), history.take(wanted), BUDGET) else {
         let hint = "read it as plain text (no format)";
         return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
     };
     // Rows left unread: the budget's cut, or the row bound standing in for the rest of what was asked.
-    let cut = budget_cut || lines > wanted;
+    let cut = budget_cut || capped;
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
     let shown = screen.size().1 as usize;
     let lost = cut || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
