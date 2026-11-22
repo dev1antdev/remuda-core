@@ -542,8 +542,7 @@ impl Terminal {
         let (cols, rows) = self.size();
         let last = (cols.saturating_sub(1), rows.saturating_sub(1) as u32);
         let Some(sel) = self.select(ffi::POINT_ACTIVE, (0, 0), last) else { return Vec::new() };
-        let text =
-            String::from_utf8_lossy(&self.format_with(ffi::FORMAT_PLAIN, Some(&sel), false, false, false)).into_owned();
+        let text = String::from_utf8_lossy(&self.format_with(ffi::FORMAT_PLAIN, Some(&sel), false, false)).into_owned();
         let mut out: Vec<String> =
             text.split('\n').take(rows as usize).map(|r| format!("{r:<w$}", w = cols as usize)).collect();
         out.resize(rows as usize, " ".repeat(cols as usize));
@@ -652,18 +651,12 @@ impl Terminal {
     /// written out, so a viewer's own find crosses a word broken at the wrap. Plain text joins the rows and
     /// trims the trailing space instead.
     fn format(&self, emit: i32, selection: Option<&ffi::Selection>, extras: bool) -> Vec<u8> {
-        self.format_with(emit, selection, extras, true, emit == ffi::FORMAT_PLAIN)
+        self.format_with(emit, selection, extras, true)
     }
 
-    /// `unwrap`: soft-wrapped rows continue without a row break; `trim`: trailing space cut.
-    fn format_with(
-        &self,
-        emit: i32,
-        selection: Option<&ffi::Selection>,
-        extras: bool,
-        unwrap: bool,
-        trim: bool,
-    ) -> Vec<u8> {
+    /// `unwrap`: soft-wrapped rows continue without a row break; without it a row is a line, and only a
+    /// plain read joined this way trims its trailing space.
+    fn format_with(&self, emit: i32, selection: Option<&ffi::Selection>, extras: bool, unwrap: bool) -> Vec<u8> {
         let screen = ffi::ScreenExtra {
             size: size_of::<ffi::ScreenExtra>(),
             cursor: extras,
@@ -677,7 +670,7 @@ impl Terminal {
             size: size_of::<ffi::FormatterOptions>(),
             emit,
             unwrap,
-            trim,
+            trim: unwrap && emit == ffi::FORMAT_PLAIN,
             extra: ffi::TerminalExtra {
                 size: size_of::<ffi::TerminalExtra>(),
                 // The full palette would paint over the viewer's own theme.
