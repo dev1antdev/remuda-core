@@ -8,7 +8,6 @@ const ROW_WRAP: i32 = 1;
 const ROW_WRAP_CONTINUATION: i32 = 2;
 const CELL_HAS_TEXT: i32 = 4;
 const CELL_WIDE: i32 = 3;
-const WIDE: i32 = 1;
 const WIDE_SPACER_HEAD: i32 = 3;
 
 /// Grid rows counted from the oldest kept: the history, then the screen.
@@ -57,27 +56,15 @@ impl Terminal {
         false
     }
 
-    /// Whether col 0 of row `y` is the first cell of a wide character.
-    fn starts_wide(&self, tag: i32, y: u32) -> bool {
-        let Some(at) = self.grid_ref(tag, 0, y) else { return false };
-        let mut cell = 0u64;
-        if unsafe { ghostty_grid_ref_cell(&at, &mut cell) } != ffi::SUCCESS {
-            return false;
-        }
-        cell_data::<i32>(cell, CELL_WIDE) == WIDE
-    }
-
     /// Whether the rows from..=to may be painted with their soft wraps joined. The break after a wrapped row is
     /// left to the wrap, so the row below has to carry it: its own continuation flag, its text — a row inserted
     /// under a wrap keeps the flag above it and loses its own, and a blank row writes no cells, so the one break
-    /// the formatter writes there would stand for two rows — and, where the row above ends on a wide character's
-    /// spacer, that character, which is what forces the wrap.
+    /// the formatter writes there would stand for two rows — and no wide character forcing it, whose width a
+    /// viewer may count for itself and count as one cell.
     pub(crate) fn joins_wraps(&self, tag: i32, from: u32, to: u32) -> bool {
         (from..to).all(|y| {
             !self.wraps(tag, y)
-                || (self.continues(tag, y + 1)
-                    && self.holds_text(tag, y + 1)
-                    && (self.starts_wide(tag, y + 1) || !self.ends_on_a_spacer_head(tag, y)))
+                || (self.continues(tag, y + 1) && self.holds_text(tag, y + 1) && !self.ends_on_a_spacer_head(tag, y))
         })
     }
 
@@ -130,13 +117,15 @@ mod tests {
     }
 
     #[test]
-    fn a_painted_history_whose_wrap_falls_on_a_wide_character_stays_one_line() {
+    fn a_painted_history_whose_wrap_falls_on_a_wide_character_keeps_its_rows() {
         let head = "a".repeat(19);
         let mut t = Terminal::new(20, 3, 1 << 20);
         t.write(format!("{head}\u{4e16}\u{754c}\r\none\r\ntwo\r\n").as_bytes());
         let mut fresh = Terminal::new(20, 3, 1 << 20);
         fresh.write(&t.paint(2));
-        assert!(fresh.plain_text().contains(&format!("{head}\u{4e16}\u{754c}")), "{:?}", fresh.plain_text());
+        let text = fresh.plain_text();
+        // The viewer counts the wide character's cells for itself, so the row it forces keeps its own break.
+        assert!(text.contains(&format!("{head}\n\u{4e16}\u{754c}")), "{text:?}");
     }
 
     #[test]

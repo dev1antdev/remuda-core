@@ -71,8 +71,9 @@ Flow control): past that, the oldest history is dropped, so the screen and the
 state still reach the viewer. A soft-wrapped row arrives as one line — no row
 break inside the wrap, and the row's width written out — so a viewer that finds
 text over its own rows crosses a word broken at the wrap, where the viewer's
-grid is the terminal's (it set the size, or is told the grid before the paint)
-and the row below a wrapped one carries the wrap and holds text. A screen that
+grid is the terminal's (it set the size, or is told the grid before the paint),
+the row below a wrapped one carries the wrap and holds text, and no wide
+character forces the wrap, its width being the viewer's to count. A screen that
 alone passes the queue cannot be sent at all: the stream drops a paint that size
 whole. A viewer applies a paint at the grid it set or was told: the rows are
 drawn at the terminal's own width, and one that took another size meanwhile holds
