@@ -73,7 +73,10 @@ break inside the wrap, and the row's width written out — so a viewer that find
 text over its own rows crosses a word broken at the wrap, where the viewer's
 grid is the terminal's (it set the size, or is told the grid before the paint),
 the row below a wrapped one carries the wrap and holds text, and no wide
-character forces the wrap, its width being the viewer's to count. A screen that
+character forces the wrap. A viewer that draws joined rows counts a cell's width
+as the core does — an emoji with a variation selector is two cells, which
+Unicode 11 widths give — because a joined row is wrapped by the viewer, not by
+the core, and its columns are the viewer's to get right. A screen that
 alone passes the queue cannot be sent at all: the stream drops a paint that size
 whole. A viewer applies a paint at the grid it set or was told: the rows are
 drawn at the terminal's own width, and one that took another size meanwhile holds

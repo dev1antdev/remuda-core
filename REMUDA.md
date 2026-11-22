@@ -235,11 +235,13 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   out) so a client's own find crosses a word broken at the wrap — in the history, on the screen and in
   `replay` — and leaves them as rows where the grid forbids it: a row whose wrap flag and the row below it
   disagree, or that holds no text (the formatter writes a blank row no cells, so its one break would stand
-  for two rows), a wrap a wide character forces (a viewer may count that character's cells for itself, as
-  one), a client whose own width is not the grid and that was not told it before the paint, and a history
-  block ending on such a spacer (the formatter moves that end onto the glyph below, which the screen would
-  then paint twice). Autowrap off is the program's, but the rows are drawn while it is
-  on, a joined row continuing only by wrapping: it goes back after the last cell. Ours: `ghostty-vt/src/wrap.rs`
+  for two rows), a wrap a wide character forces (the guard that keeps a client without Unicode 11 widths from
+  re-wrapping the row elsewhere), a client whose own width is not the grid and that was not told it before
+  the paint, and a history block ending on such a spacer (the formatter moves that end onto the glyph below,
+  which the screen would then paint twice). A client that draws joined rows counts a cell's width as we do,
+  a promise `schema/README.md` makes and remuda keeps with xterm's Unicode 11 widths. Autowrap off is the
+  program's, but the rows are drawn while it is on, a joined row continuing only by wrapping: it goes back
+  after the last cell. Ours: `ghostty-vt/src/wrap.rs`
   (`joins_wraps`, `ends_on_a_spacer_head`, `ALL_ROWS`, with their tests) and `viewers.rs`'s
   `Viewer::knows_the_grid` with `wraps_join`; in upstream's files the `unwrap` line in `format_with`,
   `mod wrap;` and `paint_with` in `ghostty-vt/src/lib.rs`, and a sentence in `schema/README.md`'s attach
