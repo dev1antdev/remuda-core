@@ -31,6 +31,8 @@ pub const FEATURES: &[&str] = &[
     "foreground_started",
     "foreground_since_boot",
 ];
+/// The most history rows a plain read gives of a finished terminal, and the most a stitched read
+/// scrolls for: the coloured read answers as far as the caller asks, its budget its only bound.
 pub const FINISHED_LINES: usize = 1000;
 /// Terminal identity variables replaced by the core's defaults unless explicitly overridden.
 pub const IDENTITY_VARS: &[&str] = &["TERM", "TERM_PROGRAM", "TERM_PROGRAM_VERSION", "COLORTERM"];
