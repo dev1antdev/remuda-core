@@ -127,15 +127,73 @@ fn read_in_vt_keeps_its_notes_off_the_rows() {
 }
 
 #[test]
-fn read_in_vt_says_when_it_stopped_at_its_history_cap() {
+fn read_in_vt_reads_as_far_above_the_screen_as_it_is_asked() {
     let s = session("0");
-    // One line wrapping over far more rows than the screen and the cap: no newline to count.
+    // One line wrapping over far more rows than the screen: no newline to count.
     let program = "head -c 240000 /dev/zero | tr '\\0' x; printf END; sleep 100";
     let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
     wait_until("printed", || text(&s, &t).ends_with("END"));
-    let r = s.json(&["read", "--format", "vt", "--lines", "1100", &t]);
+    let screen = get(&s, &t)["rows"].as_u64().unwrap() as usize;
+    // The page's find reads deeper than its own rows: what it asks for, then all there is.
+    let asked = s.json(&["read", "--format", "vt", "--lines", "500", &t]);
+    assert_eq!(asked["text"].as_str().unwrap().split('\n').count(), 500 + screen);
+    assert_eq!(asked["complete"].as_bool(), Some(true));
+    let all = s.json(&["read", "--format", "vt", "--lines", "5000", &t]);
+    assert!(all["text"].as_str().unwrap().contains("xxxx"), "the oldest row of the history came with it");
+    assert_eq!(all["complete"].as_bool(), Some(true), "nothing was dropped");
+}
+
+#[test]
+fn read_in_vt_reaches_2500_rows_above_the_screen() {
+    let s = session("0");
+    // A narrow terminal nobody types in, so 100000 characters wrap over 2500 rows.
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"40x10\"\n").unwrap();
+    // A unique word first, then 2500 wrapped rows: far more than the page's xterm keeps above the screen.
+    let program = "printf 'UNIQUE-TOP\\n'; head -c 100000 /dev/zero | tr '\\0' x; printf END; sleep 100";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).ends_with("END"));
+    let r = s.json(&["read", "--format", "vt", "--lines", "3000", &t]);
+    assert!(
+        r["text"].as_str().unwrap().contains("UNIQUE-TOP"),
+        "2500 rows above the screen, and the read stopped short"
+    );
+    assert_eq!(r["complete"].as_bool(), Some(true), "nothing was dropped");
+}
+
+#[test]
+fn read_in_vt_stops_at_its_row_bound_and_says_so() {
+    let s = session("0");
+    // A history big enough to hold more rows than one read encodes, and far more printed than that.
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"40x10\"\nhistory_mb = 20\n").unwrap();
+    let program = "head -c 810000 /dev/zero | tr '\\0' x; printf END; sleep 100";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).ends_with("END"));
+    let r = s.json(&["read", "--format", "vt", "--lines", "100000", &t]);
     let rows = r["text"].as_str().unwrap().split('\n').count();
-    assert_eq!((rows, r["complete"].as_bool()), (1000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, Some(false)));
+    assert_eq!(rows, 5_000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, "one read's row bound");
+    assert_eq!(r["complete"].as_bool(), Some(false), "the rows past the bound were not read");
+    // The bound is not a lie about short histories: asking past it with nothing there is complete.
+    let short =
+        s.json(&["run", "--bg", "sh", "-c", "printf 'only\\n'; sleep 100"])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &short).contains("only"));
+    let nothing = s.json(&["read", "--format", "vt", "--lines", "20001", &short]);
+    assert_eq!(nothing["complete"].as_bool(), Some(true), "every row there was read");
+}
+
+#[test]
+fn read_in_vt_says_when_rows_it_asked_for_are_gone() {
+    let s = session("0");
+    // A history this small cannot hold what the program prints, so the read must say some is gone.
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"40x10\"\nhistory_mb = 0.05\n").unwrap();
+    let t = s.json(&["run", "--bg", "sh", "-c", "seq 1 3000; sleep 100"])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).ends_with("3000"));
+    let all = s.json(&["read", "--format", "vt", "--lines", "5000", &t]);
+    assert_eq!(all["complete"].as_bool(), Some(false), "asking past what the history kept");
+    let kept = s.json(&["read", "--format", "vt", "--lines", "20", &t]);
+    assert_eq!(kept["complete"].as_bool(), Some(true), "well within what the history kept");
 }
 
 #[test]
