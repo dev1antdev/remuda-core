@@ -68,9 +68,20 @@ as Windows' ConPTY does when it starts), then the program's raw output,
 minus terminal queries the core already answered. The first paint keeps the
 newest history rows that fit the stream's queue (4 MiB of pending DATA, see
 Flow control): past that, the oldest history is dropped, so the screen and the
-state still reach the viewer. A screen that alone passes the queue cannot be
-sent at all: the stream drops a paint that size whole. The core never encodes
-keys: a viewer that honors 9001 sends key events in that format itself.
+state still reach the viewer. A soft-wrapped row arrives as one line — no row
+break inside the wrap, and the row's width written out — so a viewer that finds
+text over its own rows crosses a word broken at the wrap, where the viewer's
+grid is the terminal's (it set the size, or is told the grid before the paint),
+the row below a wrapped one carries the wrap and holds text, and no wide
+character forces the wrap. A viewer that draws joined rows counts a cell's width
+as the core does — an emoji with a variation selector is two cells, which
+Unicode 11 widths give — because a joined row is wrapped by the viewer, not by
+the core, and its columns are the viewer's to get right. A screen that
+alone passes the queue cannot be sent at all: the stream drops a paint that size
+whole. A viewer applies a paint at the grid it set or was told: the rows are
+drawn at the terminal's own width, and one that took another size meanwhile holds
+a paint of the old grid. The core never encodes keys: a viewer that honors 9001
+sends key events in that format itself.
 The viewer sends keys as DATA on the same channel, and RESIZE,
 FOCUS and FACTS as it changes. The last active viewer sets the size
 (active: it attached, typed, resized or gained focus); `observe` viewers never type or resize.

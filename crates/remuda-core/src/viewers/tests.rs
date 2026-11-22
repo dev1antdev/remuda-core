@@ -7,6 +7,26 @@ thread_local! {
 }
 
 #[test]
+fn a_paint_joins_rows_only_for_a_viewer_at_the_grid() {
+    let viewer = |size: (u16, u16), resize_notifications: bool| Viewer {
+        conn: Arc::new(Conn::default()),
+        channel: 0,
+        observe: false,
+        keep_size: false,
+        resize_notifications,
+        repaint_pending: false,
+        size,
+        active_at: None,
+        display: Display::default(),
+        recovering: false,
+        answers: Default::default(),
+    };
+    assert!(viewer((10, 3), false).knows_the_grid((10, 3)), "setting the size is being at the grid");
+    assert!(!viewer((15, 3), false).knows_the_grid((10, 3)), "another width, and nobody told it the grid");
+    assert!(viewer((15, 3), true).knows_the_grid((10, 3)), "told the grid before the paint");
+}
+
+#[test]
 fn resize_drags_serialize_nothing_without_observers_and_only_latest_when_stalled() {
     let root = crate::test_tmp().join(format!("rc-resize-{}", crate::platform::random_hex()));
     let paths = crate::paths::Paths {

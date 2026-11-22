@@ -50,6 +50,13 @@ impl Viewer {
     fn sets_size(&self) -> bool {
         !self.observe && !self.keep_size
     }
+
+    /// Whether this viewer's own width is the grid a paint is drawn at: it is the size the terminal has, or it
+    /// is told the grid before each paint. Only then may the paint join the rows a program soft-wrapped, which
+    /// takes a viewer of the terminal's own width.
+    fn knows_the_grid(&self, grid: (u16, u16)) -> bool {
+        self.resize_notifications || self.size == grid
+    }
 }
 
 impl Display {
@@ -107,7 +114,10 @@ impl Core {
         if !req.observe {
             self.apply_size(&mut st, id);
         }
-        let paint = first_paint(&st, id, req.history);
+        let t = &st.reg.terminals[&id];
+        let grid = (t.cols, t.rows);
+        let wrap = st.viewers[&id].last().is_some_and(|v| v.knows_the_grid(grid));
+        let paint = first_paint(&st, id, req.history, wrap);
         st.viewers.get_mut(&id).unwrap().last_mut().unwrap().repaint_pending = false;
         conn.with(|out| {
             out.open_paused(channel);
@@ -220,7 +230,7 @@ impl Core {
             });
         }
         if !behind.is_empty() {
-            let paint = first_paint(st, id, 0);
+            let paint = first_paint(st, id, 0, wraps_join(st, id));
             let recovering = st.screens[&id].continuation().is_none();
             let viewers = st.viewers.get_mut(&id).expect("viewers with queued output");
             for index in behind {
@@ -444,7 +454,7 @@ impl Core {
         if !st.viewers.get(&id).into_iter().flatten().any(ready) {
             return;
         }
-        let paint = first_paint(st, id, 0);
+        let paint = first_paint(st, id, 0, wraps_join(st, id));
         let recovering = st.screens[&id].continuation().is_none();
         for v in st.viewers.get_mut(&id).into_iter().flatten().filter(|v| ready(v)) {
             v.conn.with(|out| {
@@ -498,7 +508,7 @@ fn answering(viewers: Option<&Vec<Viewer>>) -> bool {
 /// program wants win32 key events (both pass through to viewers, so a new one
 /// must see them too; a viewer repainted after falling behind gets the mode
 /// either way).
-pub(crate) fn first_paint(st: &State, id: u32, history: usize) -> Vec<u8> {
+pub(crate) fn first_paint(st: &State, id: u32, history: usize, wrap: bool) -> Vec<u8> {
     #[cfg(test)]
     tests::PAINTS.with(|n| n.set(n.get() + 1));
     let screen = &st.screens[&id];
@@ -510,12 +520,19 @@ pub(crate) fn first_paint(st: &State, id: u32, history: usize) -> Vec<u8> {
     let kept = primary.as_ref().map_or_else(|| screen.kept_history_rows(), |primary| primary.kept_history_rows());
     let history = history.min(kept as usize);
     crate::paint::within(history, |rows| {
-        let mut paint = paint_state(st, id, screen.paint_with(rows, primary.as_ref()));
+        let mut paint = paint_state(st, id, screen.paint_with(rows, primary.as_ref(), wrap));
         if let Some(continuation) = screen.continuation() {
             paint.extend(continuation);
         }
         paint
     })
+}
+
+/// Whether every viewer of the terminal that shares one paint is at the grid, so the rows may be joined.
+pub(crate) fn wraps_join(st: &State, id: u32) -> bool {
+    let t = &st.reg.terminals[&id];
+    let grid = (t.cols, t.rows);
+    st.viewers.get(&id).is_none_or(|viewers| viewers.iter().all(|v| v.knows_the_grid(grid)))
 }
 
 fn paint_state(st: &State, id: u32, screen: Vec<u8>) -> Vec<u8> {
