@@ -162,6 +162,21 @@ fn read_in_vt_reaches_2500_rows_above_the_screen() {
 }
 
 #[test]
+fn read_in_vt_stops_at_its_row_bound_and_says_so() {
+    let s = session("0");
+    // A history big enough to hold more rows than one read encodes, and far more printed than that.
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"40x10\"\nhistory_mb = 20\n").unwrap();
+    let program = "head -c 810000 /dev/zero | tr '\\0' x; printf END; sleep 100";
+    let t = s.json(&["run", "--bg", "sh", "-c", program])["address"].as_str().unwrap().to_string();
+    wait_until("printed", || text(&s, &t).ends_with("END"));
+    let r = s.json(&["read", "--format", "vt", "--lines", "100000", &t]);
+    let rows = r["text"].as_str().unwrap().split('\n').count();
+    assert_eq!(rows, 20_000 + get(&s, &t)["rows"].as_u64().unwrap() as usize, "one read's row bound");
+    assert_eq!(r["complete"].as_bool(), Some(false), "the rows past the bound were not read");
+}
+
+#[test]
 fn read_in_vt_says_when_rows_it_asked_for_are_gone() {
     let s = session("0");
     // A history this small cannot hold what the program prints, so the read must say some is gone.

@@ -18,18 +18,25 @@ pub enum ReadFormat {
 
 /// At most this much JSON, half a frame: a reply past a frame ends the line it travels on.
 const BUDGET: usize = crate::wire::MAX_PAYLOAD / 2;
+/// At most this many history rows one read encodes: they are encoded under the core's lock, and this is
+/// as far above the screen as a client's find is ever likely to ask (remuda's `MaxScrollbackRows`).
+const MAX_ROWS: usize = 20_000;
 
 /// The live screen with up to `lines` of history above it (main screen only, the newest rows whose
-/// JSON fits the budget), with colors. None for a finished terminal: what it keeps has none.
+/// JSON fits the budget and at most `MAX_ROWS` of them), with colors. None for a finished terminal:
+/// what it keeps has none.
 pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, RpcError>> {
     let st = core.lock();
     let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
     let full_screen = screen.alt_screen();
     let history = screen.styled_history();
-    let Some((rows, kept, cut)) = fit(screen.styled_screen(), history.take(lines), BUDGET) else {
+    let wanted = lines.min(MAX_ROWS);
+    let Some((rows, kept, budget_cut)) = fit(screen.styled_screen(), history.take(wanted), BUDGET) else {
         let hint = "read it as plain text (no format)";
         return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
     };
+    // Rows left unread: the budget's cut, or the row bound standing in for the rest of what was asked.
+    let cut = budget_cut || lines > wanted;
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
     let shown = screen.size().1 as usize;
     let lost = cut || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
