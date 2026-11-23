@@ -253,6 +253,11 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   added machine still paints a soft-wrapped row as two lines.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
+- `crates/remuda-core/src/sweep.rs`'s tests: `members_settled` wants a process found on three reads
+  25 ms apart, since macOS's python3 is a stub that execs the developer directory's python3 and then
+  the framework's Python, each image readable for a few milliseconds with none at all in between; a
+  sweep called on a lone sighting of such an image found nothing to end, and the test then waited out
+  the sleeper's 30 s. The end the test waits for is bounded at 2 s, so a miss fails at once.
 
 ## Taking upstream's changes
 

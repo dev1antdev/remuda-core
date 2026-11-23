@@ -190,7 +190,7 @@ mod tests {
         let (mut ours, mut other) = (sleeper(&tokens[0]), sleeper("someone-else"));
         assert_eq!(members_settled(&tokens, 1), [ours.id() as i32]);
         sweep(&tokens);
-        assert!(ours.wait().unwrap().signal().is_some(), "it was ended");
+        assert!(ended_by_signal(&mut ours, Duration::from_secs(2)), "it was left running");
         assert!(members(&tokens).is_empty());
         other.kill().unwrap();
         other.wait().unwrap();
@@ -253,16 +253,47 @@ mod tests {
         ours.wait().unwrap();
     }
 
-    /// `members` once it finds `n` (5 s at most): macOS's python3 is a stub
-    /// that starts the real one, and can't be read in between.
+    /// `members` once it has found `n` processes on three reads 25 ms apart (5 s
+    /// at most). macOS's python3 is a stub that execs the developer directory's
+    /// python3, which then execs the framework's Python: each image is readable
+    /// for a few milliseconds, with none at all in between. A single sighting
+    /// can be an image the sleeper is about to leave, and a sweep called then
+    /// finds nothing to end.
     fn members_settled(tokens: &[String], n: usize) -> Vec<i32> {
         let deadline = Instant::now() + Duration::from_secs(5);
+        let mut steady = 0;
         loop {
             let found = members(tokens);
-            if found.len() == n || Instant::now() > deadline {
+            if found.len() == n {
+                steady += 1;
+                if steady == 3 {
+                    return found;
+                }
+            } else {
+                steady = 0;
+            }
+            if Instant::now() > deadline {
                 return found;
             }
-            std::thread::sleep(Duration::from_millis(20));
+            std::thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    /// Whether `child` was ended by a signal within `limit`; one that was not is
+    /// ended here, so a sweep that missed it fails the test now rather than
+    /// after the sleeper's own time.
+    fn ended_by_signal(child: &mut std::process::Child, limit: Duration) -> bool {
+        let deadline = Instant::now() + limit;
+        loop {
+            match child.try_wait().unwrap() {
+                Some(status) => return status.signal().is_some(),
+                None if Instant::now() < deadline => std::thread::sleep(Duration::from_millis(10)),
+                None => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
         }
     }
 
