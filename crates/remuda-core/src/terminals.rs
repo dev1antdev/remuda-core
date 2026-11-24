@@ -102,6 +102,11 @@ pub struct Terminal {
     /// were dropped, so a read reaching back that far is not complete.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub printed: u64,
+    /// Rows its output pushed into its history, at least: what the history grew by, exact while it has room, and one
+    /// for a write that left it no larger (at its limit libghostty counts no further, and a wrapped long line leaves
+    /// no line break to count). More rows than the history and screen hold means some were dropped.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub scrolled: u64,
     /// It used the full screen, whose history the app keeps to itself: once
     /// it has exited, nobody can scroll it back.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -305,6 +310,7 @@ impl Registry {
                 told_parent: false,
                 scope: None,
                 printed: 0,
+                scrolled: 0,
                 full_screen: false,
                 win32_input: false,
                 seen_ms: None,

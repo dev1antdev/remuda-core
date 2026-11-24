@@ -198,6 +198,35 @@ fn read_in_vt_says_when_rows_it_asked_for_are_gone() {
     assert_eq!(kept["complete"].as_bool(), Some(true), "well within what the history kept");
 }
 
+// One long line, no line break: it wraps over thousands of rows, and once the history overflows the old rows are gone
+// though no newline was printed. The read must say so: rows are counted on the write path, not line breaks.
+#[test]
+fn a_wrapped_line_that_overflowed_the_history_reads_incomplete() {
+    let s = session("0");
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"40x10\"\nhistory_mb = 0.05\n").unwrap();
+    // 200000 characters in 40 columns: 5000 rows, far more than a history this small keeps, and not one line break.
+    let t =
+        s.json(&["run", "--bg", "sh", "-c", "head -c 200000 /dev/zero | tr '\\0' x; printf END; sleep 300"])["address"]
+            .as_str()
+            .unwrap()
+            .to_string();
+    wait_until("printed", || text(&s, &t).ends_with("END"));
+    let vt = s.json(&["read", "--format", "vt", "--lines", "5000", &t]);
+    assert_eq!(vt["complete"].as_bool(), Some(false), "rows were dropped, and no line break said so: {vt}");
+    let plain = s.json(&["read", "--lines", "5000", &t]);
+    assert_eq!(plain["complete"].as_bool(), Some(false), "the plain read too");
+
+    // A history that held everything it printed: complete.
+    let short = s.json(&["run", "--bg", "sh", "-c", "printf 'a\\nb\\nc\\n'; sleep 300"])["address"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    wait_until("printed", || text(&s, &short).contains("c"));
+    let all = s.json(&["read", "--format", "vt", "--lines", "5000", &short]);
+    assert_eq!(all["complete"].as_bool(), Some(true), "a short history is all kept: {all}");
+}
+
 // A deep history read takes a while. The core runs its tasks on one thread, so the read is worked out off it and its
 // lock is held only for the snapshot it starts from: another terminal must keep answering meanwhile, or every pane
 // waits for the deepest read in the fleet.
