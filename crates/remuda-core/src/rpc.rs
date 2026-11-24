@@ -82,6 +82,21 @@ pub fn response(id: Value, result: Result<Value, RpcError>) -> Value {
     }
 }
 
+/// The longest a request's id may be, in bytes of its JSON: a reply carries the id whole, and a reply must fit one frame.
+pub const MAX_REQUEST_ID: usize = 1024;
+
+/// The bytes a reply goes on the wire as: one larger than a frame is answered instead by the error saying so, so a big
+/// result can never end a connection. A request's id is bounded (`MAX_REQUEST_ID`), so the stand-in error itself always fits.
+pub fn reply_bytes(reply: &Value) -> Vec<u8> {
+    let bytes = reply.to_string().into_bytes();
+    if bytes.len() <= crate::wire::MAX_PAYLOAD {
+        return bytes;
+    }
+    let id = reply.get("id").cloned().unwrap_or(Value::Null);
+    let larger = RpcError::new("too_large", "the reply is larger than one frame", "ask for less of it: fewer lines");
+    response(id, Err(larger)).to_string().into_bytes()
+}
+
 fn ref_name(schema: &Value) -> Option<&str> {
     schema.get("$ref")?.as_str()?.strip_prefix("#/$defs/")
 }
@@ -197,3 +212,21 @@ macro_rules! methods {
     };
 }
 pub(crate) use methods;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_reply_past_a_frame_becomes_the_error_saying_so() {
+        let small = response(json!(7), Ok(json!({"ok": true})));
+        assert_eq!(reply_bytes(&small), small.to_string().into_bytes(), "a reply that fits goes as it is");
+
+        let huge = response(json!(7), Ok(json!({"text": "x".repeat(crate::wire::MAX_PAYLOAD)})));
+        let bytes = reply_bytes(&huge);
+        assert!(bytes.len() < MAX_REQUEST_ID * 4, "the stand-in is bounded: {} bytes", bytes.len());
+        let reply: Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(reply["id"], 7, "the caller still knows which call it answers");
+        assert_eq!(reply["error"]["data"]["kind"], "too_large", "{reply}");
+    }
+}
