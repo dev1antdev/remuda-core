@@ -385,11 +385,17 @@ async fn terminal_label(core: Ctx<'_>, p: LabelParams) -> Result<Public, RpcErro
 async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcError> {
     let id = resolve(core, &p.terminal)?;
     core.saw(p.caller.as_deref(), id);
-    if p.format == crate::styled::ReadFormat::Vt
-        && let Some(result) = crate::styled::read(core, id, p.lines)
-    {
-        core.flush_saved().await?;
-        return result;
+    // The read is worked out on a blocking thread: this core's runtime runs its tasks on one thread, so formatting a
+    // deep history here would hold every other terminal's input and output until it was done. The lock is held only
+    // for the snapshot a read starts from (`screen_bytes`), never for the encoding.
+    let owned = Arc::clone(core.core);
+    let (lines, vt) = (p.lines, p.format == crate::styled::ReadFormat::Vt);
+    if vt {
+        let vread = blocking(move || Ok(crate::styled::read(&owned, id, lines))).await?;
+        if let Some(result) = vread {
+            core.flush_saved().await?;
+            return result;
+        }
     }
     // A full-screen app keeps its history to itself: scroll it to read it.
     let full_screen = core.lock().screens.get(&id).is_some_and(|s| s.alt_screen());
@@ -413,34 +419,44 @@ async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcEr
         core.flush_saved().await?;
         return Ok(result);
     }
-    let result = {
-        let st = core.lock();
-        let t = st.reg.terminals.get(&id).expect("resolved");
-        let lines = if t.is_live() { p.lines } else { p.lines.min(FINISHED_LINES) };
-        let rows = t.rows as usize;
-        let exact = t.screen == "exact";
-        let text = core.screen_text(&st, id);
-        let mut complete = exact && text.is_some();
-        let text = text.unwrap_or_default();
-        let all: Vec<&str> = text.trim_end_matches('\n').lines().collect();
-        let start = all.len().saturating_sub(rows + lines);
-        // Asked for more than is kept, and more was printed than is kept: some is gone.
-        let kept = all.len().saturating_sub(rows).min(lines);
-        if p.lines > kept && t.printed > (kept + rows) as u64 {
-            complete = false;
-        }
-        if p.lines > 0 && !t.is_live() && t.full_screen {
-            complete = false;
-        }
-        ReadResult {
-            text: all[start..].join("\n"),
-            complete,
-            how: if p.lines == 0 { "screen" } else { "history" }.into(),
-            why: None,
-        }
-    };
+    let owned = Arc::clone(core.core);
+    let result = blocking(move || plain_read(&owned, id, lines)).await?;
     core.flush_saved().await?;
     Ok(result)
+}
+
+/// A terminal's plain text as `terminal_read` answers it, worked out away from the runtime: the screen's bytes under the
+/// lock, the text formatted after it.
+fn plain_read(core: &Core, id: u32, asked: usize) -> Result<ReadResult, RpcError> {
+    let (bytes, rows, exact, live, printed, full_screen) = {
+        let st = core.lock();
+        let t = st.reg.terminals.get(&id).expect("resolved");
+        (core.screen_bytes(&st, id), t.rows as usize, t.screen == "exact", t.is_live(), t.printed, t.full_screen)
+    };
+    let lines = if live { asked } else { asked.min(FINISHED_LINES) };
+    // A finished terminal's screen is the file the click kept; a live one's is the snapshot taken above.
+    let text = bytes
+        .or_else(|| std::fs::read(core.snapshot_path(id)).ok())
+        .and_then(|bytes| core.restored(&bytes))
+        .map(|screen| screen.plain_text());
+    let mut complete = exact && text.is_some();
+    let text = text.unwrap_or_default();
+    let all: Vec<&str> = text.trim_end_matches('\n').lines().collect();
+    let start = all.len().saturating_sub(rows + lines);
+    // Asked for more than is kept, and more was printed than is kept: some is gone.
+    let kept = all.len().saturating_sub(rows).min(lines);
+    if asked > kept && printed > (kept + rows) as u64 {
+        complete = false;
+    }
+    if asked > 0 && !live && full_screen {
+        complete = false;
+    }
+    Ok(ReadResult {
+        text: all[start..].join("\n"),
+        complete,
+        how: if asked == 0 { "screen" } else { "history" }.into(),
+        why: None,
+    })
 }
 
 async fn terminal_attach(core: Ctx<'_>, p: AttachParams) -> Result<AttachResult, RpcError> {

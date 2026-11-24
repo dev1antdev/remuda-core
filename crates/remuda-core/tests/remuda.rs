@@ -6,6 +6,8 @@ use common::framed::Viewer;
 use common::*;
 use remuda_core::wire;
 use serde_json::json;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 fn session(quiet_ms: &str) -> Session {
@@ -194,6 +196,48 @@ fn read_in_vt_says_when_rows_it_asked_for_are_gone() {
     assert_eq!(all["complete"].as_bool(), Some(false), "asking past what the history kept");
     let kept = s.json(&["read", "--format", "vt", "--lines", "20", &t]);
     assert_eq!(kept["complete"].as_bool(), Some(true), "well within what the history kept");
+}
+
+// A deep history read takes a while. The core runs its tasks on one thread, so the read is worked out off it and its
+// lock is held only for the snapshot it starts from: another terminal must keep answering meanwhile, or every pane
+// waits for the deepest read in the fleet.
+#[test]
+fn a_deep_read_leaves_the_other_terminals_answering() {
+    let s = session("0");
+    std::fs::create_dir_all(s.root.join("config/remuda-core")).unwrap();
+    std::fs::write(s.root.join("config/remuda-core/config.toml"), "headless = \"200x50\"\nhistory_mb = 20\n").unwrap();
+    let deep = s.json(&["run", "--bg", "sh", "-c", "seq 1 200000; printf END; sleep 300"])["address"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    wait_until("printed", || text(&s, &deep).ends_with("END"));
+    let other = s.json(&["run", "--bg", "sh", "-c", BYTES])["address"].as_str().unwrap().to_string();
+
+    let mut reader = s.connect();
+    let mut fast = s.connect();
+    let reading = Arc::new(AtomicBool::new(true));
+    let (rows, read, worst) = std::thread::scope(|scope| {
+        let done = Arc::clone(&reading);
+        let handle = scope.spawn(move || {
+            let began = Instant::now();
+            let out = reader.call(1, "terminal.read", json!({"terminal": deep, "lines": 5000, "format": "vt"}));
+            let read = began.elapsed();
+            done.store(false, Ordering::SeqCst);
+            (out["result"]["text"].as_str().unwrap_or_default().lines().count(), read)
+        });
+        std::thread::sleep(Duration::from_millis(2));
+        let mut worst = Duration::ZERO;
+        while reading.load(Ordering::SeqCst) {
+            let t = Instant::now();
+            fast.call(2, "terminal.get", json!({"terminal": other}));
+            fast.call(3, "terminal.read", json!({"terminal": other, "lines": 0}));
+            worst = worst.max(t.elapsed());
+        }
+        let (rows, read) = handle.join().unwrap();
+        (rows, read, worst)
+    });
+    assert!(rows > 1000, "the read itself came short: {rows} rows");
+    assert!(worst * 3 < read, "a terminal waited {worst:?} while another's {read:?} read ran: the read holds the core");
 }
 
 #[test]

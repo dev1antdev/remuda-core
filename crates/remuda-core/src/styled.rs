@@ -27,8 +27,15 @@ const MAX_ROWS: usize = 5_000;
 /// JSON fits the budget and at most `MAX_ROWS` of them), with colors. None for a finished terminal:
 /// what it keeps has none.
 pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, RpcError>> {
-    let st = core.lock();
-    let (screen, t) = (st.screens.get(&id)?, st.reg.terminals.get(&id)?);
+    // The screen is taken under the lock and encoded after it: encoding walks every cell, and a second
+    // terminal's typing must not wait behind a deep read. The snapshot is the one call that sees the
+    // screen as it stands.
+    let (bytes, printed, exact) = {
+        let st = core.lock();
+        let t = st.reg.terminals.get(&id)?;
+        (core.screen_bytes(&st, id)?, t.printed, t.screen == "exact")
+    };
+    let screen = core.restored(&bytes)?;
     let full_screen = screen.alt_screen();
     let history = screen.styled_history();
     // Asked for more rows than the bound while there were more than that to give: the rest is unread.
@@ -42,9 +49,9 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     let cut = budget_cut || capped;
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
     let shown = screen.size().1 as usize;
-    let lost = cut || lines > kept && (full_screen || t.printed > (kept + shown) as u64);
+    let lost = cut || lines > kept && (full_screen || printed > (kept + shown) as u64);
     let how = if lines == 0 || full_screen { "screen" } else { "history" };
-    let complete = t.screen == "exact" && !lost;
+    let complete = exact && !lost;
     Some(Ok(ReadResult { text: rows.join("\n"), complete, how: how.into(), why: None }))
 }
 
