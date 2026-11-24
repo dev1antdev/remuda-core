@@ -171,6 +171,41 @@ fn hello_switches_to_framed_mode() {
     assert!(reply["result"]["pid"].is_number());
 }
 
+// A request's id is echoed whole in its reply, and a reply travels as one frame: an id of megabytes added to a reply of
+// megabytes is past MAX_PAYLOAD, which the receiver rejects — ending the connection. It must be an error instead, and a
+// bounded one, with the connection still whole.
+#[test]
+fn an_id_too_long_for_a_reply_is_an_error_not_a_broken_connection() {
+    let s = Session::new();
+    let file = s.root.join("big.txt");
+    std::fs::write(&file, "x".repeat(8 << 20)).unwrap(); // 8 MB of text: file.read's own most
+    s.json(&["server", "start"]);
+    let mut conn = s.connect();
+    let hello = conn.call(1, "hello", json!({"framed": true}));
+    assert_eq!(hello["result"]["framed"], true);
+
+    let id = "x".repeat(15_500_000);
+    let request = json!({"jsonrpc": "2.0", "id": id, "method": "file.read",
+                         "params": {"path": file.display().to_string()}})
+    .to_string();
+    assert!(request.len() < wire::MAX_PAYLOAD, "the request itself fits a frame: {} bytes", request.len());
+    conn.writer.write_all(&wire::encode(0, wire::DATA, request.as_bytes())).unwrap();
+    let (channel, kind, payload) = read_frame(&mut conn.reader);
+    assert_eq!((channel, kind), (0, wire::DATA));
+    let reply: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(reply["id"], Value::Null, "the stand-in reply is bounded: {reply}");
+    assert_eq!(reply["error"]["data"]["kind"], "invalid_request", "{reply}");
+
+    // The connection is still whole: the next call answers.
+    let after = json!({"jsonrpc": "2.0", "id": 2, "method": "server.status"}).to_string();
+    conn.writer.write_all(&wire::encode(0, wire::DATA, after.as_bytes())).unwrap();
+    let (channel, kind, payload) = read_frame(&mut conn.reader);
+    assert_eq!((channel, kind), (0, wire::DATA));
+    let reply: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(reply["id"], 2, "{reply}");
+    assert!(reply["result"]["pid"].is_number(), "{reply}");
+}
+
 #[test]
 fn connect_carries_the_protocol_over_stdio() {
     let s = Session::new();

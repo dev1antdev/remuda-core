@@ -101,6 +101,13 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   ours, in `tests/remuda.rs`. A core
   older than this on an added machine ignores `format` and answers plain text (no row starts with
   `ESC[0m`).
+- A **reply is one frame** (`rpc.rs`'s `reply_bytes`, `MAX_REQUEST_ID`): one larger than `wire::MAX_PAYLOAD`
+  is answered instead by the `too_large` error, so a big result never ends a connection, and a request whose
+  id is longer than 1024 bytes of JSON is refused before dispatch (`invalid_request`, with a null id) — an id
+  comes back whole in its reply, so a request of megabytes used to make its own reply past the frame and the
+  receiver dropped the line (`an_id_too_long_for_a_reply_is_an_error_not_a_broken_connection`). Ours: in
+  upstream's `rpc.rs` the bound and the id length, in `server.rs` the check before dispatch and the two
+  writes — one framed, one plain — that go through it.
 - `events.subscribe` takes `output` watches (`output_watches` in hello's features): each row that
   comes into a watch's last rows of a terminal here matching its substring or regex (the `regex`
   crate, Unicode `\d` and `\w`) is an `output` event, the rows already there `fresh`; at most 256

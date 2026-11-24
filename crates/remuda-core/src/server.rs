@@ -213,7 +213,11 @@ async fn connection(core: Arc<Core>, read: platform::AsyncRead, mut write: Write
             _ => handling.await,
         };
         let wrote = match &handled.reply {
-            Some(reply) => write.write_all(format!("{reply}\n").as_bytes()).await,
+            Some(reply) => {
+                let mut line = rpc::reply_bytes(reply);
+                line.push(b'\n');
+                write.write_all(&line).await
+            }
             None => Ok(()),
         };
         // Even if the caller is gone: `rc server stop` typed in one of our
@@ -375,7 +379,7 @@ async fn read_frames(core: &Arc<Core>, conn: &Arc<Conn>, read: &mut Reader) -> i
                     let handled = SEND_CANCELLED.scope(cancelled, handle(&core, Some(&conn), None, &payload)).await;
                     if let Some(reply) = &handled.reply {
                         conn.with(|out| {
-                            out.control(wire::encode(0, wire::DATA, reply.to_string().as_bytes()));
+                            out.control(wire::encode(0, wire::DATA, &crate::rpc::reply_bytes(reply)));
                             if let Some(channel) = reply["result"]["channel"].as_u64() {
                                 out.resume(channel as u32);
                             }
@@ -489,6 +493,17 @@ async fn handle(
         let err = RpcError::invalid_request("missing method");
         return reply(rpc::response(request["id"].clone(), Err(err)));
     };
+    // A reply carries the request's id whole, and a reply must fit one frame: an id too long for that is refused before
+    // any work, with a bounded id of its own.
+    if let Some(id) = request.get("id") {
+        let too_long = serde_json::to_string(id).map_or(true, |id| id.len() > rpc::MAX_REQUEST_ID);
+        if too_long {
+            return reply(rpc::response(
+                Value::Null,
+                Err(RpcError::invalid_request(format!("the request id is longer than {} bytes", rpc::MAX_REQUEST_ID))),
+            ));
+        }
+    }
     let call = api::Call { core, conn, plain };
     let params = crate::remote::from_peer(core, conn, request["params"].clone());
     let result = match crate::remote::route(core, method, &params) {
