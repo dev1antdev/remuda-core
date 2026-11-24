@@ -218,6 +218,18 @@ impl Core {
         self.settings().history_bytes()
     }
 
+    /// The bytes of a terminal's live screen as it stands, taken under the lock: one call into libghostty, where
+    /// encoding the rows for a read walks every cell. A read restores them (`restored`) and works outside the lock, so
+    /// a deep history never holds another terminal's typing behind it. None when no live screen is kept there.
+    pub fn screen_bytes(&self, st: &State, id: u32) -> Option<Vec<u8>> {
+        st.screens.get(&id)?.snapshot()
+    }
+
+    /// The screen a snapshot's bytes restore to, at this core's scrollback size; None when they do not decode.
+    pub fn restored(&self, bytes: &[u8]) -> Option<Screen> {
+        Screen::restore(bytes, self.history_bytes())
+    }
+
     pub fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(|p| p.into_inner())
     }

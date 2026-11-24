@@ -82,10 +82,15 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
 - `terminal.read` takes `format: "vt"` (`rc read --format vt`): a live terminal's rows with their
   colors as SGR, each starting with a style reset, history above the screen on the main screen
   only (a full-screen program is not scrolled for it), as many of the newest rows as the caller asks
-  for while their JSON fits half a frame (8 MiB) and at most 5000 of them — a read holds the core's
-  lock while it encodes, about what a paint costs, and that is as far as a client's find asks: a page's find reads deeper than
-  its own rows, and `complete` says only that rows were really dropped; a finished terminal answers
-  its plain text. A core older than this on an added machine still stops at 1000 rows and calls the
+  for while their JSON fits half a frame (8 MiB) and at most 5000 of them, which is as far as a
+  client's find asks: a page's find reads deeper than its own rows, and `complete` says only that
+  rows were really dropped; a finished terminal answers
+  its plain text. **A read is worked out on a blocking thread, its lock held only for the screen's
+  snapshot** (`runtime.rs`'s `screen_bytes`, one call into libghostty; `restored` rebuilds it
+  outside): the core's runtime runs its tasks on one thread, so a deep history formatted there
+  would hold every other terminal's input and output for as long as it took (in `api.rs`'s
+  `terminal_read`, plain text through `plain_read` the same; `TestADeepReadLeavesTheOtherTerminalsAnswering`).
+  A core older than this on an added machine still stops at 1000 rows and calls the
   read incomplete whenever more are asked. The rows are encoded cell by cell from
   libghostty-vt's cell styles (its formatter drops a blank cell's background), a row walked along
   its page from its first cell; the underline color is left out. Ours: `ghostty-vt/src/styled.rs` (`styled_screen`, `styled_history`, with their
