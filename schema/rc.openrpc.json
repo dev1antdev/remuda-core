@@ -1009,6 +1009,12 @@
             "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
             "type": "string"
           },
+          "scrolled": {
+            "description": "Rows its output pushed into its history, at least: what the history grew by, exact while it has room, and one\nfor a write that left it no larger (at its limit libghostty counts no further, and a wrapped long line leaves\nno line break to count). More rows than the history and screen hold means some were dropped.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "signal": {
             "format": "int32",
             "type": [
@@ -1518,6 +1524,12 @@
           "screen": {
             "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
             "type": "string"
+          },
+          "scrolled": {
+            "description": "Rows its output pushed into its history, at least: what the history grew by, exact while it has room, and one\nfor a write that left it no larger (at its limit libghostty counts no further, and a wrapped long line leaves\nno line break to count). More rows than the history and screen hold means some were dropped.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
           },
           "signal": {
             "format": "int32",

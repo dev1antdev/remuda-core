@@ -30,10 +30,10 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     // The screen is taken under the lock and encoded after it: encoding walks every cell, and a second
     // terminal's typing must not wait behind a deep read. The snapshot is the one call that sees the
     // screen as it stands.
-    let (bytes, printed, exact) = {
+    let (bytes, scrolled, exact) = {
         let st = core.lock();
         let t = st.reg.terminals.get(&id)?;
-        (core.screen_bytes(&st, id)?, t.printed, t.screen == "exact")
+        (core.screen_bytes(&st, id)?, t.scrolled, t.screen == "exact")
     };
     let screen = core.restored(&bytes)?;
     let full_screen = screen.alt_screen();
@@ -49,7 +49,7 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     let cut = budget_cut || capped;
     // A full-screen program is not scrolled for colors; history it printed and lost is gone.
     let shown = screen.size().1 as usize;
-    let lost = cut || lines > kept && (full_screen || printed > (kept + shown) as u64);
+    let lost = cut || lines > kept && (full_screen || scrolled > (kept + shown) as u64);
     let how = if lines == 0 || full_screen { "screen" } else { "history" };
     let complete = exact && !lost;
     Some(Ok(ReadResult { text: rows.join("\n"), complete, how: how.into(), why: None }))

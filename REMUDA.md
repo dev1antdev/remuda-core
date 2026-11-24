@@ -84,7 +84,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   only (a full-screen program is not scrolled for it), as many of the newest rows as the caller asks
   for while their JSON fits half a frame (8 MiB) and at most 5000 of them, which is as far as a
   client's find asks: a page's find reads deeper than its own rows, and `complete` says only that
-  rows were really dropped; a finished terminal answers
+  rows were really dropped — read off the terminal's `scrolled` counter, rows its output pushed into
+  the history (what the history grew by, and one for a write that left it no larger: a wrapped line
+  with no line break counts too, where `printed` counting line breaks saw nothing); a finished terminal answers
   its plain text. **A read is worked out on a blocking thread, its lock held only for the screen's
   snapshot** (`runtime.rs`'s `screen_bytes`, one call into libghostty; `restored` rebuilds it
   outside): the core's runtime runs its tasks on one thread, so a deep history formatted there

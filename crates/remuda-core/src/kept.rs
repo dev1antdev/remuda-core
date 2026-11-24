@@ -105,6 +105,7 @@ impl Core {
             t.full_screen = false;
             t.win32_input = false;
             t.printed = 0;
+            t.scrolled = 0;
             t.screen = "exact".into();
             t.submit = None;
             t.stop = None;

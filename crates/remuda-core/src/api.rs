@@ -431,7 +431,7 @@ fn plain_read(core: &Core, id: u32, asked: usize) -> Result<ReadResult, RpcError
     let (bytes, rows, exact, live, printed, full_screen) = {
         let st = core.lock();
         let t = st.reg.terminals.get(&id).expect("resolved");
-        (core.screen_bytes(&st, id), t.rows as usize, t.screen == "exact", t.is_live(), t.printed, t.full_screen)
+        (core.screen_bytes(&st, id), t.rows as usize, t.screen == "exact", t.is_live(), t.scrolled, t.full_screen)
     };
     let lines = if live { asked } else { asked.min(FINISHED_LINES) };
     // A finished terminal's screen is the file the click kept; a live one's is the snapshot taken above.

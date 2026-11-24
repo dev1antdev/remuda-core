@@ -174,6 +174,7 @@ impl Core {
         }
         // While a read scrolls the app, its frames are ours alone: viewers get one repaint after.
         let scrolling = st.stitching.contains(&id);
+        let rows_before = st.screens.get(&id).map_or(0, |s| s.kept_history_rows());
         let instance = st.reg.terminals.get(&id).and_then(|t| t.holder.clone());
         let State { screens, relays, viewers, holders, output_watch, gates, .. } = st;
         let holder = holders.iter().find(|l| Some(&l.instance) == instance.as_ref());
@@ -182,6 +183,12 @@ impl Core {
         let recovering = viewers.get(&id).into_iter().flatten().any(|v| v.recovering);
         let (out, recovered) =
             if recovering { relay.feed_to_ground(screen, bytes) } else { (relay.feed(screen, bytes), None) };
+        if !scrolling && !bytes.is_empty() {
+            let rows_after = screen.kept_history_rows();
+            if let Some(t) = st.reg.terminals.get_mut(&id) {
+                t.scrolled += if rows_after > rows_before { (rows_after - rows_before) as u64 } else { 1 };
+            }
+        }
         let win32_input = relay.win32_input.take();
         if let Some(watchers) = output_watch.get_mut(&id).filter(|_| !scrolling) {
             watchers.retain(|w| w.send(out.clone()).is_ok());
