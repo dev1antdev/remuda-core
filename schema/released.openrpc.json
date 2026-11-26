@@ -1009,6 +1009,12 @@
             "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
             "type": "string"
           },
+          "scrolled": {
+            "description": "Rows its output pushed into its history, at least: what the history grew by, exact while it has room, and one\nfor a write that left it no larger (at its limit libghostty counts no further, and a wrapped long line leaves\nno line break to count). More rows than the history and screen hold means some were dropped.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "signal": {
             "format": "int32",
             "type": [
@@ -1519,6 +1525,12 @@
             "description": "\"exact\", or \"inexact\" after a core crash (older history may be missing).",
             "type": "string"
           },
+          "scrolled": {
+            "description": "Rows its output pushed into its history, at least: what the history grew by, exact while it has room, and one\nfor a write that left it no larger (at its limit libghostty counts no further, and a wrapped long line leaves\nno line break to count). More rows than the history and screen hold means some were dropped.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
           "signal": {
             "format": "int32",
             "type": [
@@ -1669,7 +1681,7 @@
       "name": "Apache-2.0"
     },
     "title": "remuda-core",
-    "version": "0.2.4"
+    "version": "0.2.5"
   },
   "methods": [
     {
@@ -2685,7 +2697,7 @@
       }
     },
     {
-      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (the text may have reached the terminal and its Enter was held back; keys a person pressed meanwhile still go).",
+      "description": "Paste text and press Enter after a person sends or clears their draft (at most 60 s since their last key), otherwise after ~3 s of quiet. Keys pressed during delivery are held, then delivered. Refuses a blocked program unless `force`. With `foreground`, types only while that process group leads the terminal, looked at before the paste and again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted`. Its Enter is written only while the program is still unblocked, unless `force`, and while an `if` send's status is still that word: a dialog that came up during the pause keeps its Enter, the text staying in its input line (keys a person pressed meanwhile still go).",
       "errors": [
         {
           "code": -32000,
@@ -2791,11 +2803,11 @@
           }
         },
         {
-          "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back). API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
+          "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back).\nIts Enter is written only while the program is still unblocked (unless `force`) and, for `if`, on that same\nword: a dialog that came up during the pause keeps its Enter. API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
           "name": "foreground",
           "required": false,
           "schema": {
-            "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back). API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
+            "description": "Only type while this process group leads the terminal (its `foreground.pid`), looked at before the paste\nand again before Enter: refused before the paste as `status_mismatch`, after it as `not_submitted` (its Enter held back).\nIts Enter is written only while the program is still unblocked (unless `force`) and, for `if`, on that same\nword: a dialog that came up during the pause keeps its Enter. API only:\na client that read `terminal.get` names it, after checking `send_foreground` in hello.",
             "format": "int32",
             "type": [
               "integer",
@@ -2984,7 +2996,7 @@
       }
     },
     {
-      "description": "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. Does not wait for an unsent draft.",
+      "description": "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. A keys naming `now` goes at once, past a keys call already waiting for that pause; it does not wait for an unsent draft, and neither does a plain keys call.",
       "errors": [
         {
           "code": -32000,
@@ -3048,12 +3060,12 @@
           }
         },
         {
-          "description": "Skip the wait for a person's quiet: for keys the person pressed.",
+          "description": "Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed.",
           "name": "now",
           "required": false,
           "schema": {
             "default": false,
-            "description": "Skip the wait for a person's quiet: for keys the person pressed.",
+            "description": "Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed.",
             "type": "boolean"
           }
         },
