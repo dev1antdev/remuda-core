@@ -114,7 +114,9 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   writes — one framed, one plain — that go through it.
 - `events.subscribe` takes `output` watches (`output_watches` in hello's features): each row that
   comes into a watch's last rows of a terminal here matching its substring or regex (the `regex`
-  crate, Unicode `\d` and `\w`) is an `output` event, the rows already there `fresh`; at most 256
+  crate, Unicode `\d` and `\w`) is an `output` event carrying the row's `pos`, its place in the
+  terminal's history and screen (the same text at another place is another row), the rows already
+  there `fresh`; at most 256
   watches, 1 to 200 rows, 4 KB a pattern, 256 bytes an id; rows seen wait in their watch's queue
   and are told in turn across watches, 256 events (1 MB) a look; what still waits past 1000 rows
   or 64 KB loses its oldest (never its newest), counted as `lost` on the next row told; a row over

@@ -102,6 +102,12 @@ impl Terminal {
     /// then history above it on the main screen), oldest first, as `plain_text`
     /// reads it: soft-wrapped rows joined, trailing spaces cut.
     pub fn recent_rows(&self, n: usize) -> Vec<String> {
+        self.recent_rows_at(n).into_iter().map(|(_, line)| line).collect()
+    }
+
+    /// The text of the last `n` rows with each row's absolute position in the terminal's history and screen, oldest
+    /// first, as `recent_rows` reads the text: two rows of the same text at different places are different rows.
+    pub fn recent_rows_at(&self, n: usize) -> Vec<(u64, String)> {
         let shown = self.screen_rows().iter().rposition(|r| !r.trim().is_empty()).map_or(0, |i| i + 1);
         let above = if self.alt_screen() { 0 } else { self.history_rows() };
         let bottom = above + shown as u32;
@@ -112,7 +118,10 @@ impl Terminal {
         let last = self.size().0.saturating_sub(1);
         let Some(window) = self.select(SCREEN, (0, top), (last, bottom - 1)) else { return Vec::new() };
         let text = self.format_with(ffi::FORMAT_PLAIN, Some(&window), false, true);
-        String::from_utf8_lossy(&text).split('\n').map(str::to_string).collect()
+        let lines: Vec<String> = String::from_utf8_lossy(&text).split('\n').map(str::to_string).collect();
+        let count = lines.len() as u64;
+        let bottom = u64::from(bottom);
+        lines.into_iter().enumerate().map(|(i, line)| (bottom - count + i as u64, line)).collect()
     }
 
     fn styled_row(&self, tag: i32, y: u32, cols: u16) -> String {
@@ -295,6 +304,14 @@ mod tests {
         assert_eq!(t.recent_rows(9), ["one", "two", "three", "four", "five"]);
         t.write(b"\x1b[?1049h\x1b[Hfull");
         assert_eq!(t.recent_rows(9), ["full"], "a full-screen program: its screen alone");
+    }
+
+    #[test]
+    fn recent_rows_at_carries_each_row_s_place() {
+        let mut t = Terminal::new(20, 4, 1 << 20);
+        t.write(b"one\r\ntwo\r\nthree\r\nfour\r\nfive\r\n");
+        assert_eq!(t.recent_rows_at(2), [(3, "four".to_string()), (4, "five".to_string())]);
+        assert_eq!(t.recent_rows_at(9).len(), 5, "5 rows stand in the history and the screen");
     }
 
     #[test]

@@ -346,7 +346,7 @@ fn an_output_watch_hears_a_command_that_prints_and_exits_at_once() {
     std::thread::sleep(Duration::from_millis(400));
     std::fs::write(&go, "").unwrap();
     let event = next_event(&mut events, |m| m["params"]["type"] == "output");
-    assert_eq!(event["params"]["data"], json!({"watch": "fail", "line": "last words FAIL", "fresh": false}));
+    assert_eq!(event["params"]["data"], json!({"watch": "fail", "line": "last words FAIL", "pos": 0, "fresh": false}));
 }
 
 #[test]
