@@ -118,7 +118,7 @@ methods! { Ctx<'_>;
         "Wait until the program is not working (any word but working, or it exited/was lost); already not working returns at once. A program that never reported status is working until it exits. After a send from the same caller, waits for the turn that send started. A message to the caller also ends it: ended false, reason message, from = sender. A timeout is a check-in: ended false, current status.",
         errors ["not_found", "machine_unknown", "invalid_params", "needs_target", "config"];
     "terminal.keys" => terminal_keys, KeysParams => KeysResult,
-        "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. Does not wait for an unsent draft.",
+        "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. A keys naming `now` goes at once, past a keys call already waiting for that pause; it does not wait for an unsent draft, and neither does a plain keys call.",
         errors ["not_found", "machine_unknown", "finished", "unavailable", "invalid_params"];
     "terminal.interrupt" => terminal_interrupt, InterruptParams => InterruptResult,
         "Press the stop key (esc if it reports status, else ctrl+c), then report what was observed. Never escalates.",

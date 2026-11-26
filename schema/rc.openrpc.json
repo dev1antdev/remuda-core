@@ -2996,7 +2996,7 @@
       }
     },
     {
-      "description": "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. Does not wait for an unsent draft.",
+      "description": "Press named keys, encoded for the program's current keyboard modes, after ~3 s of quiet. A keys naming `now` goes at once, past a keys call already waiting for that pause; it does not wait for an unsent draft, and neither does a plain keys call.",
       "errors": [
         {
           "code": -32000,
@@ -3060,12 +3060,12 @@
           }
         },
         {
-          "description": "Skip the wait for a person's quiet: for keys the person pressed.",
+          "description": "Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed.",
           "name": "now",
           "required": false,
           "schema": {
             "default": false,
-            "description": "Skip the wait for a person's quiet: for keys the person pressed.",
+            "description": "Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed.",
             "type": "boolean"
           }
         },
