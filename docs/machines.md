@@ -46,7 +46,7 @@ Host box
   User user
 ```
 
-Then `rc machine add box` is enough. The same targets work in Herdr's add-machine dialog, which also lists the Hosts from your SSH config.
+Then `rc machine add box` is enough; that host's other settings come from your SSH config.
 
 Without `--name`, the first host label becomes its name (IPs stay whole), shortened to 32 characters.
 Names that are taken or look like terminal ids get a numbered suffix: `t14` becomes `t14-2`.

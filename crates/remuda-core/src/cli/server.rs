@@ -9,7 +9,7 @@ pub(super) enum ServerCmd {
     Status,
     /// Restart the core (e.g. after an update); programs keep running.
     Restart {
-        /// Take this shell's environment for new terminals; run from a terminal outside Herdr.
+        /// Take this shell's environment for new terminals; run from a terminal outside remuda.
         #[arg(long)]
         fresh: bool,
     },
@@ -18,7 +18,7 @@ pub(super) enum ServerCmd {
 pub(super) fn restart(paths: &Paths, fresh: bool) -> Result<(), RpcError> {
     if fresh && std::env::var_os("RC_TERMINAL_ID").is_some() {
         eprintln!(
-            "rc: this shell carries Herdr's environment; run --fresh from a terminal outside Herdr or unset unwanted variables first"
+            "rc: this shell carries remuda's environment; run --fresh from a terminal outside remuda or unset unwanted variables first"
         );
     }
     let environment: std::collections::BTreeMap<_, _> =

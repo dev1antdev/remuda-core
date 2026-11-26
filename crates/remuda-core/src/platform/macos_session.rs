@@ -105,7 +105,7 @@ fn repair(paths: &Paths, local: LoginSession) -> Result<super::Stream, RpcError>
     Err(RpcError::new(
         "unavailable",
         "the core still belongs to an earlier macOS login",
-        "retry from Herdr or a terminal in the current login; existing terminals were kept",
+        "retry from a terminal in the current login; existing terminals were kept",
     ))
 }
 

@@ -204,8 +204,8 @@ A machine whose SSH login fails shows `needs_login` and retries slowly (up to
 every 10 minutes); `rc machine login <name>` in a terminal reconnects now.
 
 On Windows, `rc server status` never starts a core. If elevated SSH startup
-would block the same user's desktop session, open Herdr on that Windows
-machine or run `rc server start` in a normal desktop terminal, then reconnect.
+would block the same user's desktop session, run `rc server start` on that
+Windows machine in a normal desktop terminal, then reconnect.
 Headless Windows machines can still start their core over SSH.
 New Windows terminals refresh user/system environment settings, including PATH.
 
@@ -245,7 +245,7 @@ paths start at your current folder. Prefer explicit paths for remote work.
   seconds and a combined 1 MiB output limit; remaining profile jobs are ended after
   capture. A failed or blocked profile falls back to the incoming environment and records
   the shell and reason in `core.log`. To refresh an existing remote core, run
-  `rc server restart --fresh` from a normal SSH login outside Herdr.
+  `rc server restart --fresh` from a normal SSH login outside remuda.
 - `rc run` without a command starts this machine's own shell. On macOS,
   this is a login shell so it loads the login environment; explicit commands
   are unchanged. Recovery shells use the same rule.
@@ -307,7 +307,7 @@ paths start at your current folder. Prefer explicit paths for remote work.
   If launchd fails, startup falls back to a direct child and logs the reason in
   `core.log`; that core may end with its launching app. A start timeout records
   the job label, failed phase and available spawn state before cleanup.
-- On macOS, reopening Herdr after logout/login refreshes an older GUI core's
+- On macOS, reopening the terminal app after logout/login refreshes an older GUI core's
   login context while keeping surviving terminals. New terminals use the new
   login; existing programs retain their original OS context. An explicit
   `rc server restart` from a healthy login also retires holders from another
@@ -315,7 +315,7 @@ paths start at your current folder. Prefer explicit paths for remote work.
   replace it, and lock/unlock does not rotate holders. Cores installed before
   this session metadata need an update or explicit restart once.
 - Updates and `rc server restart` keep the environment the core started with.
-  Run `rc server restart --fresh` from a terminal outside Herdr to use that shell's
+  Run `rc server restart --fresh` from a terminal outside remuda to use that shell's
   environment for new terminals without ending running programs. Existing
   programs keep their environment; kept terminals use the fresh one after
   recovery. Stopping and starting also takes a fresh environment. Per-terminal
