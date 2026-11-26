@@ -120,12 +120,24 @@ pub struct Conn {
     pub wake: tokio::sync::Notify,
     /// It fell too far behind (`MAX_CONTROL`): the connection must end.
     pub overflowed: tokio::sync::Notify,
+    /// The reader is gone: nothing new may be registered on it. Set by
+    /// `Core::detach` under the state lock, so a call still in flight either
+    /// registers before the detach takes it or sees it and registers nothing.
+    ended: std::sync::atomic::AtomicBool,
     next_channel: std::sync::atomic::AtomicU32,
 }
 
 impl Conn {
     pub fn outbox(&self) -> std::sync::MutexGuard<'_, Outbox> {
         self.outbox.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    pub fn end(&self) {
+        self.ended.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    pub fn ended(&self) -> bool {
+        self.ended.load(std::sync::atomic::Ordering::Relaxed)
     }
 
     pub fn new_channel(&self) -> u32 {

@@ -131,6 +131,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   regenerated `THIRD-PARTY-NOTICES` and schema, the `output` row and a paragraph in
   `schema/README.md`; the tests are ours, in `watches.rs`,
   `styled.rs` and `tests/remuda.rs`.
+- `events.subscribe` refuses a call whose framed connection is already gone: detaching the whole
+  connection marks it ended under the state lock, so a call still in flight sees it and registers
+  nothing — no subscription, no heartbeat, no watches (`wire.rs`'s `Conn::end`, `viewers.rs`'s
+  `detach`, `api.rs`'s `events_subscribe`; the test is in `api.rs`).
 - `terminal.send` takes `foreground` (API only, no CLI flag; `send_foreground` in hello's features):
   it types only while that process group leads the terminal — refused as `status_mismatch` when the
   last look already saw another, then looked at afresh before the paste (refused `status_mismatch`,
@@ -278,6 +282,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   the framework's Python, each image readable for a few milliseconds with none at all in between; a
   sweep called on a lone sighting of such an image found nothing to end, and the test then waited out
   the sleeper's 30 s. The end the test waits for is bounded at 2 s, so a miss fails at once.
+- The hints and help say how to start our core, not Herdr's: `platform/windows.rs`,
+  `platform/windows_session.rs`, `platform/macos_session.rs`, `cli/server.rs`'s `--fresh` help and
+  its line about this shell's environment, `src/SKILL.md`'s Windows conflict, macOS login and
+  `--fresh` sentences, `docs/machines.md`'s add-machine note, and `skills/remuda-core/SKILL.md`,
+  which no longer offers Herdr's window or mods; `tests/windows.rs` checks the new Windows hint.
+  The line on macOS privacy keeps naming Herdr.app, the app whose grants do not transfer.
 
 ## Taking upstream's changes
 
