@@ -443,7 +443,10 @@ fn implicit_ssh_start_reports_desktop_conflict_or_starts_headless() {
     } else {
         let error: Value = serde_json::from_slice(&out.stderr).unwrap();
         assert!(error["error"]["message"].as_str().unwrap().contains("desktop session"), "{error}");
-        assert!(error["error"]["hint"].as_str().unwrap().contains("open Herdr on that Windows machine"), "{error}");
+        assert!(
+            error["error"]["hint"].as_str().unwrap().contains("run 'rc server start' on that Windows machine"),
+            "{error}"
+        );
         assert_ne!(s.out(&["server", "status"]).0, 0, "refused startup left a core");
     }
 }

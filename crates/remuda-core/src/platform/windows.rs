@@ -249,13 +249,13 @@ pub fn connect_error(error: &io::Error, existing_only: bool) -> Option<crate::rp
         Some(crate::rpc::RpcError::new(
             "unavailable",
             format!("the Windows core exists but this process cannot access its pipe: {error}"),
-            "if it was started elevated or over SSH, stop it with 'rc server stop' in an elevated terminal on that Windows machine, then open Herdr or run 'rc server start' in a normal desktop terminal",
+            "if it was started elevated or over SSH, stop it with 'rc server stop' in an elevated terminal on that Windows machine, then run 'rc server start' in a normal desktop terminal",
         ))
     } else if existing_only {
         Some(crate::rpc::RpcError::new(
             "unavailable",
             format!("the Windows core is not reachable: {error}"),
-            "open Herdr on that Windows machine, or run 'rc server start' there",
+            "run 'rc server start' on that Windows machine in a normal desktop terminal",
         ))
     } else {
         None
