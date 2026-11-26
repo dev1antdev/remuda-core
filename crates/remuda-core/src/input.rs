@@ -267,6 +267,13 @@ pub enum Step {
         only_if: String,
         force: bool,
     },
+    /// The Enter after a paste, written only while the program is unblocked and, when the send named `if`, still
+    /// that word: a dialog that came up during the pause gets no answer (remuda's, `front.rs`).
+    Submit {
+        bytes: Vec<u8>,
+        only_if: Option<String>,
+        force: bool,
+    },
 }
 
 pub(crate) fn env_ms(var: &str, default: u64) -> Duration {
@@ -409,6 +416,17 @@ impl Core {
                         self.changed.notify_waiters();
                     }
                 }
+                Step::Submit { bytes, only_if, force } => {
+                    let st = self.lock();
+                    let status = st.reg.terminals.get(&id).and_then(|t| t.status.as_ref());
+                    if let Err(e) = crate::front::submit(id, status, only_if.as_deref(), force) {
+                        refused = Some(e);
+                        break;
+                    }
+                    if let Some(link) = st.link(id) {
+                        link.input(id, &bytes);
+                    }
+                }
                 Step::Write(bytes) | Step::EndDraft(bytes) => {
                     if let Some(link) = self.lock().link(id) {
                         link.input(id, &bytes);
@@ -484,7 +502,7 @@ impl Core {
                 }
                 let screen = st.screens.get(&id).expect("live terminal has a screen");
                 // A template may say how its agent submits (default: Enter after 200 ms).
-                let submit = match &t.submit {
+                let enter = match &t.submit {
                     Some(key) => crate::keys::encode(screen, key)?,
                     None => b"\r".to_vec(),
                 };
@@ -492,7 +510,8 @@ impl Core {
                 let bytes = paste(screen.dec_mode(2004), text);
                 let paste = if first_task { Step::FirstTask(bytes) } else { Step::Write(bytes) };
                 let paste = crate::front::conditional(paste, only_if, force);
-                let mut steps = vec![paste, Step::Pause(gap), Step::Write(submit)];
+                let submit = Step::Submit { bytes: enter, only_if: only_if.map(str::to_string), force };
+                let mut steps = vec![paste, Step::Pause(gap), submit];
                 if let Some(pid) = front {
                     crate::front::guard(&mut steps, pid);
                 }

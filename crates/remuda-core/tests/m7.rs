@@ -436,3 +436,27 @@ fn a_template_can_override_how_messages_are_submitted() {
     assert_eq!((code, err["error"]["kind"].as_str()), (1, Some("spawn_failed")));
     let _: Value = s.json(&["templates"]);
 }
+
+#[test]
+fn a_program_that_asks_between_the_paste_and_enter_keeps_no_enter() {
+    let s = session();
+    // Says idle, reads the five bytes of "hello" one by one, then asks for permission while the message's pause runs.
+    template(
+        &s,
+        "asks",
+        r#"---
+paste_gap_ms: 700
+command: sh -c 'stty -echo -icanon min 1 time 0; printf "\033]7501;state=idle\033\\"; i=0; while [ $i -lt 5 ]; do dd bs=1 count=1 2>/dev/null >/dev/null; i=$((i+1)); done; printf "\033]7501;state=blocked:kind=permission\033\\"; while read -r l; do echo "got:$l"; done'
+---
+"#,
+    );
+    let t = s.json(&["run", "--bg", "asks"])["address"].as_str().unwrap().to_string();
+    wait_until("idle", || s.json(&["get", &t])["status"]["state"] == "idle");
+    let (_, err) = s.err(&["send", &t, "hello"]);
+    assert_eq!(err["error"]["kind"], "not_submitted", "{err}");
+    assert!(err["error"]["message"].as_str().unwrap().contains("blocked"), "{err}");
+    assert!(err["error"]["hint"].as_str().unwrap().contains("Enter was held back"), "{err}");
+    // The text is in the input line, but the Enter its dialog would have answered never came.
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!text(&s, &t).contains("got:"), "the held-back Enter submitted the message");
+}
