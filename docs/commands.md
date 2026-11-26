@@ -269,7 +269,7 @@ Arguments:
 
 Options:
       --json  JSON output even in a terminal
-      --now   Skip the wait for a person's quiet: for keys the person pressed
+      --now   Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed
   -h, --help  Print help
 ```
 
