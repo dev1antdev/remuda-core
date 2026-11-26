@@ -391,6 +391,9 @@ impl Core {
     /// A viewer left (`channel` = None: the whole connection went away).
     pub fn detach(&self, conn: &Arc<Conn>, channel: Option<u32>) {
         let mut st = self.lock();
+        if channel.is_none() {
+            conn.end();
+        }
         self.unsubscribe(&mut st, conn, channel);
         let mut touched = Vec::new();
         for (id, vs) in st.viewers.iter_mut() {

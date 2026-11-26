@@ -643,6 +643,13 @@ async fn events_subscribe(core: Ctx<'_>, p: SubscribeParams) -> Result<Subscribe
     let watching = (sink.clone(), filter.clone());
     let (seq, terminals) = {
         let mut st = core.lock();
+        if core.conn.is_some_and(|conn| conn.ended()) {
+            return Err(RpcError::new(
+                "closed",
+                "the connection closed before the subscription was registered",
+                "reconnect and subscribe again",
+            ));
+        }
         let terminals = core.matching(&st, &filter);
         core.subscribe(&mut st, filter, sink);
         (st.events.seq, terminals)
@@ -791,4 +798,46 @@ async fn machine_rm(core: Ctx<'_>, p: MachineParams) -> Result<RemoveResult, Rpc
 
 async fn rpc_discover(_: Ctx<'_>, _: Empty) -> Result<serde_json::Value, RpcError> {
     Ok(openrpc())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::paths::Paths;
+    use crate::platform::random_hex;
+    use crate::wire::Conn;
+
+    fn test_core() -> (Arc<Core>, std::path::PathBuf) {
+        let root = std::env::temp_dir().join(format!("rc-subscribe-{}", random_hex()));
+        let paths = Paths {
+            state: root.join("state"),
+            config: root.join("config.toml"),
+            socket: root.join("run/core.sock"),
+            holder_socket: root.join("run/core.holder.sock"),
+        };
+        paths.create_dirs().unwrap();
+        let core = Core::start(paths, CoreInfo { id: "test".into(), name: "test".into() }).unwrap();
+        (core, root)
+    }
+
+    #[tokio::test]
+    async fn a_subscription_arriving_after_the_connection_closed_registers_nothing() {
+        let (core, root) = test_core();
+        let conn = Arc::new(Conn::default());
+        let call = Call { core: &core, conn: Some(&conn), plain: None };
+        assert!(events_subscribe(&call, SubscribeParams::default()).await.is_ok());
+        assert_eq!(core.lock().events.subs.len(), 1);
+
+        core.detach(&conn, None);
+        assert!(core.lock().events.subs.is_empty(), "the closed connection's subscription went");
+
+        assert!(
+            events_subscribe(&call, SubscribeParams::default()).await.is_err(),
+            "a call in flight is refused once the connection is gone"
+        );
+        assert!(core.lock().events.subs.is_empty(), "a call in flight registers nothing after the close");
+
+        drop(core);
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }
