@@ -838,6 +838,6 @@ mod tests {
         assert!(core.lock().events.subs.is_empty(), "a call in flight registers nothing after the close");
 
         drop(core);
-        std::fs::remove_dir_all(root).unwrap();
+        let _ = std::fs::remove_dir_all(root); // Windows may still hold the state writer's file for a moment
     }
 }
