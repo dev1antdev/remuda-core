@@ -88,6 +88,36 @@ fn still(id: u32, status: Option<&crate::status::Status>, want: &str, force: boo
     Err(RpcError::new("status_mismatch", message, "nothing was typed"))
 }
 
+/// The Enter of a send, checked under the lock it is written under: a program that asked something after the paste
+/// keeps no Enter (the text stays in its input line), and one that left the word a send named `if` neither.
+pub(crate) fn submit(
+    id: u32,
+    status: Option<&crate::status::Status>,
+    only_if: Option<&str>,
+    force: bool,
+) -> Result<(), RpcError> {
+    let address = crate::terminals::address(id);
+    let word = status.map(|s| s.state.as_str());
+    if word == Some("blocked") && !force {
+        let kind = status.and_then(|s| s.kind.as_deref()).unwrap_or("waiting");
+        return Err(RpcError::new(
+            "not_submitted",
+            format!("{address} is blocked ({kind})"),
+            "its text was pasted but its Enter was held back: answer its dialog, then press Enter yourself, or send again with --force",
+        ));
+    }
+    if let Some(want) = only_if
+        && word != Some(want)
+    {
+        return Err(RpcError::new(
+            "not_submitted",
+            format!("{address} is {}, not {want}", word.unwrap_or("silent")),
+            "its text was pasted but its Enter was held back: read the terminal before sending again",
+        ));
+    }
+    Ok(())
+}
+
 /// Refused at once when the core's last look already saw another program in front, before the send takes the
 /// person's draft as ended; the fresh looks of `guard` still decide.
 pub(crate) fn last_seen(t: &Terminal, pid: i32) -> Result<(), RpcError> {
@@ -256,5 +286,25 @@ mod tests {
             assert_eq!(refusal.kind, kind, "{now:?} force {force}");
         }
         assert!(still(7, Some(&status("blocked")), "blocked", true).is_ok());
+    }
+
+    #[test]
+    fn the_enter_is_held_when_a_dialog_came_up_after_the_paste() {
+        let status = |state: &str| crate::status::Status {
+            state: state.into(),
+            kind: (state == "blocked").then(|| "permission".into()),
+            progress: None,
+            app: String::new(),
+            title: String::new(),
+            msg: String::new(),
+        };
+        assert!(submit(7, Some(&status("idle")), None, false).is_ok());
+        let blocked = submit(7, Some(&status("blocked")), None, false).unwrap_err();
+        assert_eq!(blocked.kind, "not_submitted");
+        assert!(blocked.hint.contains("Enter was held back"), "{}", blocked.hint);
+        assert!(submit(7, Some(&status("blocked")), None, true).is_ok(), "--force answers the dialog on purpose");
+        let moved = submit(7, Some(&status("working")), Some("done"), false).unwrap_err();
+        assert_eq!(moved.kind, "not_submitted");
+        assert!(submit(7, Some(&status("done")), Some("done"), false).is_ok());
     }
 }

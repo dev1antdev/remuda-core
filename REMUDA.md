@@ -134,10 +134,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   its Enter held back) — so an agent that left while the send waited for a person's draft never has
   its message run by the shell behind it; a relay refuses the field towards a core without the
   feature (`needs_update`). Ours: `remuda-core/src/front.rs` (`send_for`, `guard`, `last_seen`,
-  `in_front`, `ask`, `Asked`, `answering`, `link_ended`, `linked`, with their tests) and
+  `submit`, `in_front`, `ask`, `Asked`, `answering`, `link_ended`, `linked`, with their tests) and
   `refused` with the shared `older` in `remote/remuda.rs` (with its test); in
-  upstream's files the `Front` step and its arm in `input.rs`'s `type_in` (a refusal still ends the
-  step's turn and hands the person's held keys over), `send_message` made `pub(crate)` with a
+  upstream's files the `Front` and `Submit` steps and their arms in `input.rs`'s `type_in` (a
+  refusal still ends the step's turn and hands the person's held keys over; the Enter is checked
+  under the lock it is written under, blocked first unless `force`, then the `if` word),
+  `send_message` made `pub(crate)` with a
   `front` param and its check in the prepare closure (`send` and `send_first_task` pass `None`),
   `Core::foreground` asking through `front::ask` (the request sent and its lookup noted with the
   holder asked, under one lock; none without a link) and the import it no longer uses; in

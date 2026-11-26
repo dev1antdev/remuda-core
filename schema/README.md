@@ -142,7 +142,10 @@ mean). Refused as `status_mismatch` when the core's last look already saw anothe
 then looked at afresh before the paste (`status_mismatch`: nothing typed) and again
 before Enter (`not_submitted`: the text may have reached the terminal and the send
 held back its own Enter, though a key a person pressed meanwhile still goes, so read
-the terminal before sending again). Each look is the holder's answer to that very
+the terminal before sending again). Its Enter is written only while the program
+stayed unblocked (unless `force`) and, for `if`, on that same word: a dialog that
+came up during the pause keeps its Enter, the text staying in its input line. Each
+look is the holder's answer to that very
 request, never an earlier sample; a terminal still run by a holder from before
 this release (one kept across `rc update`) cannot promise that, so a send naming
 `foreground` there is refused as `needs_update` and types nothing. It narrows, it cannot close: between a look and the
