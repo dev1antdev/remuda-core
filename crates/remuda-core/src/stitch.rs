@@ -189,7 +189,9 @@ impl Core {
         }
         // The input queue: no send, keys or note in between. A person's keys wait.
         let queue = self.lock().queues.entry(id).or_default().clone();
+        let writes = self.lock().writes.entry(id).or_default().clone();
         let _turn = queue.lock().await;
+        let _writing = writes.lock().await;
         {
             // Whatever went in while we queued (a send) may have changed that.
             let mut st = self.lock();

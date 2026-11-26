@@ -330,15 +330,19 @@ impl Core {
     /// Types `steps` (built by `prepare` from the live state) into terminal `id`.
     /// `quiet`: how long a person must have stopped typing first.
     /// `submits`: also wait for their unfinished draft, releasing immediately on send/clear.
+    /// `ahead`: a key the person pressed goes before a `keys` waiting for the pause: it takes no turn in the queue,
+    /// only the write that keeps it out of an active sequence.
     pub async fn type_in<T>(
         &self,
         id: u32,
         quiet: Duration,
         submits: bool,
+        ahead: bool,
         prepare: impl FnOnce(&State, &Terminal) -> Result<(T, Vec<Step>), RpcError>,
     ) -> Result<T, RpcError> {
         let draft = draft_timeout(&self.paths.config);
         let queue = self.lock().queues.entry(id).or_default().clone();
+        let writes = self.lock().writes.entry(id).or_default().clone();
         let sends = self.lock().sends.entry(id).or_default().clone();
         let _send_turn = if submits { Some(sends.lock().await) } else { None };
         let (out, steps, _turn) = 'waiting: loop {
@@ -352,7 +356,7 @@ impl Core {
                     tokio::time::sleep(left.min(Duration::from_millis(25))).await;
                 }
             }
-            let turn = queue.lock().await;
+            let turn = if ahead { None } else { Some(queue.lock().await) };
             loop {
                 if submits {
                     crate::server::check_cancelled()?;
@@ -390,6 +394,7 @@ impl Core {
                 tokio::time::sleep(left.min(Duration::from_millis(25))).await;
             }
         };
+        let _writing = writes.lock().await;
         let mut refused = None;
         for step in steps {
             match step {
@@ -468,7 +473,7 @@ impl Core {
         }
         self.settle(id).await?;
         let (status, turn, reported) = self
-            .type_in(id, quiet(), true, |st, t| {
+            .type_in(id, quiet(), true, false, |st, t| {
                 let word = state_word(t);
                 if word.as_deref() == Some("blocked") && !force {
                     return Err(RpcError::new(
@@ -564,7 +569,7 @@ impl Core {
 
     /// Named keys, after a person has paused typing, or at once when `now` (keys the person pressed).
     pub async fn keys(&self, id: u32, names: &[String], now: bool) -> Result<(Option<String>, u64), RpcError> {
-        self.type_in(id, if now { Duration::ZERO } else { quiet() }, false, |st, t| {
+        self.type_in(id, if now { Duration::ZERO } else { quiet() }, false, now, |st, t| {
             let screen = st.screens.get(&id).expect("live terminal has a screen");
             let mut steps = Vec::new();
             for name in names {
@@ -589,7 +594,7 @@ impl Core {
         };
         let before = if reported { -1 } else { self.foreground(id).await };
         let key = self
-            .type_in(id, Duration::ZERO, false, |st, t| {
+            .type_in(id, Duration::ZERO, false, true, |st, t| {
                 let default = if reported { "esc" } else { "ctrl+c" };
                 let key = t.stop.clone().unwrap_or_else(|| default.into());
                 let screen = st.screens.get(&id).expect("live terminal has a screen");

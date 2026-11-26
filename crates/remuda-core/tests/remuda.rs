@@ -34,6 +34,32 @@ fn keys_now_skip_the_pause_a_person_typing_starts() {
 }
 
 #[test]
+fn keys_now_pass_a_keys_call_waiting_for_the_pause() {
+    let s = session("3000");
+    let t = bytes(&s);
+    let mut person = Viewer::attach(&s, &t, 80, 24, json!({}));
+    person.typed(b"\x1b[A");
+    person.shows("41");
+    let waiting = {
+        let mut cmd = s.cmd();
+        cmd.args(["keys", &t, "b"]);
+        std::thread::spawn(move || cmd.output().unwrap())
+    };
+    std::thread::sleep(Duration::from_millis(150));
+    let pressed = Instant::now();
+    s.connect().call(2, "terminal.keys", json!({"terminal": t, "keys": ["a"], "now": true}));
+    person.shows("61");
+    assert!(
+        pressed.elapsed() < Duration::from_millis(250),
+        "the now key waited for the queued keys: {:?}",
+        pressed.elapsed()
+    );
+    assert!(!waiting.is_finished(), "the regular keys did not wait for the pause");
+    assert!(waiting.join().unwrap().status.success());
+    person.shows("62");
+}
+
+#[test]
 fn keys_without_now_still_wait_for_the_pause() {
     let s = session("600");
     let t = bytes(&s);

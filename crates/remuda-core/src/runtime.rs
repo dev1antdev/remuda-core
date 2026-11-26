@@ -57,6 +57,9 @@ pub struct State {
     pub events: crate::events::Events,
     pub gates: HashMap<u32, crate::input::Gate>,
     pub queues: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
+    /// Held while a request writes its steps: a key the person pressed (`now`) takes it between the steps of a send or
+    /// a keys call waiting for the pause, but never inside one.
+    pub writes: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub sends: HashMap<u32, Arc<tokio::sync::Mutex<()>>>,
     pub foreground: crate::front::Asked,
     /// The holders that answer a foreground lookup only on the link that asked it (`front.rs`).

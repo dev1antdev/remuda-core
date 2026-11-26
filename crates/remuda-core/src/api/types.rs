@@ -589,7 +589,7 @@ pub struct KeysParams {
     /// Key names: enter, esc, tab, up, ctrl+c, alt+x, f5, a, ...
     #[arg(required = true)]
     pub keys: Vec<String>,
-    /// Skip the wait for a person's quiet: for keys the person pressed.
+    /// Skip the wait for a person's quiet, and pass a `keys` already waiting for it: for keys the person pressed.
     #[arg(long)]
     #[serde(default)]
     pub now: bool,

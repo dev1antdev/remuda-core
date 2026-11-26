@@ -66,10 +66,12 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   team first, upstream's lines kept as they are: no build of ours carries it.
 - `distribution/macos-signing.md`: a line saying it describes upstream's release, not ours.
 - `terminal.keys` takes `now` (`rc keys --now`): keys a person pressed in remuda go without the
-  quiet pause after their typing. They keep their turn in the terminal's one input queue, as
-  `interrupt` does: behind a `keys` call already waiting there for that pause (`api/types.rs`,
-  `input.rs`, `api.rs`, a line in `src/SKILL.md`, the generated docs and schema; the tests are ours,
-  `tests/remuda.rs`). A core older than this on an added machine ignores `now` and waits as before.
+  quiet pause after their typing, and past a `keys` call already waiting for that pause. They take no
+  turn in the terminal's one input queue, only the write that keeps them out of an active send, keys
+  sequence or history read (`type_in`'s `ahead` and the `writes` lock in `runtime.rs`, which
+  `stitch.rs` takes too); `interrupt` goes the same way (`api/types.rs`, `input.rs`, `api.rs`, a line
+  in `src/SKILL.md`, the generated docs and schema; the tests are ours, `tests/remuda.rs`). A core
+  older than this on an added machine ignores `now` and waits as before.
 - `terminal.attach` takes `keep_size`: a viewer that types but never sets the terminal's size,
   and leaves it as it is when no other viewer sets it (`api/types.rs`, `api.rs` with its
   `keep_size` feature in hello, `viewers.rs`, `remote/viewers.rs` calling our
