@@ -263,7 +263,7 @@ Each event's `data`, and how to apply it to a snapshot:
 | `labels` | `{labels}`: all labels now; plus `record` (the whole `Terminal`) when it newly matches your filter | replace `labels`; with `record`, add it; with a label filter, a terminal that no longer matches leaves your view (you still get this event) |
 | `size` | `{cols, rows}` | set both |
 | `foreground` | `{pid, name, argv, cwd, started_ms, started_since_boot}`, or null: what runs in it now (the foreground process group's leader) and its folder; read about twice a second | set `foreground` |
-| `output` | `{watch, line, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
+| `output` | `{watch, line, pos, fresh, cut?, lost?}`: a row that came into one of your `output` watches' last rows matching it; `pos` its place in the terminal's history and screen, so the same text at another place is another row; `fresh` for a row already there when you subscribed; `cut` when `line` is only the part of a longer row around what matched; `lost`, when present, how many of its rows before this one were dropped unsent | act on it |
 
 `events.subscribe {output: [{id, terminal, match: {type: "substring" | "regex", value}, lines}]}`
 watches terminals here (not `machine/t7`: subscribe to that machine's core). Each

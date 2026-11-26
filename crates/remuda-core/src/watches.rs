@@ -62,12 +62,12 @@ pub struct Watch {
     terminal: u32,
     lines: usize,
     find: Find,
-    /// The matching rows standing at the last look, each with how many times it stands.
-    seen: HashMap<String, usize>,
+    /// The matching rows standing at the last look, each with its place and how many times it stands there.
+    seen: HashMap<(String, u64), usize>,
     /// Rows seen and not told yet, each with whether it stood there when the watch began.
     /// Rows seen and not told yet, as told: the text, whether it stood there when
-    /// the watch began, whether it was cut.
-    pending: VecDeque<(String, bool, bool)>,
+    /// the watch began, whether it was cut, and its place in the terminal.
+    pending: VecDeque<(String, bool, bool, u64)>,
     pending_bytes: usize,
     /// Rows dropped from a full `pending`, told with the next row that is sent.
     lost: usize,
@@ -191,6 +191,9 @@ impl Budget {
     }
 }
 
+/// Rows of one terminal and count, read once a look and shared by the watches asking for them.
+type LookedRows = HashMap<(u32, usize), Option<Vec<(u64, String)>>>;
+
 /// One look: the terminals that printed since the last are read, then each
 /// watch's waiting rows are told in turn as far as one look goes. False once
 /// the subscription is gone.
@@ -219,7 +222,7 @@ fn look(
             printed.insert(*id, now) != Some(now)
         })
         .collect();
-    let mut rows: HashMap<(u32, usize), Option<Vec<String>>> = HashMap::new();
+    let mut rows: LookedRows = HashMap::new();
     for w in watches.iter_mut().filter(|w| !w.done && (!w.looked || moved.contains(&w.terminal))) {
         if let Some(lines) = rows.entry((w.terminal, w.lines)).or_insert_with(|| recent(core, &st, w)) {
             observe(w, lines);
@@ -257,26 +260,28 @@ fn look(
 }
 
 /// A watch's last rows: the live screen's, or while it has none, those of the screen it left.
-fn recent(core: &Core, st: &crate::runtime::State, w: &Watch) -> Option<Vec<String>> {
+fn recent(core: &Core, st: &crate::runtime::State, w: &Watch) -> Option<Vec<(u64, String)>> {
     if let Some(screen) = st.screens.get(&w.terminal) {
-        return Some(screen.recent_rows(w.lines));
+        return Some(screen.recent_rows_at(w.lines));
     }
     st.reg.terminals.get(&w.terminal)?;
     let saved = std::fs::read(core.snapshot_path(w.terminal)).ok()?;
-    Some(ghostty_vt::Terminal::restore(&saved, core.history_bytes())?.recent_rows(w.lines))
+    Some(ghostty_vt::Terminal::restore(&saved, core.history_bytes())?.recent_rows_at(w.lines))
 }
 
 /// Queues the matching lines that came into view since the last look, in their order.
-fn observe(w: &mut Watch, lines: &[String]) {
+fn observe(w: &mut Watch, lines: &[(u64, String)]) {
     let fresh = !w.looked;
-    let mut standing: HashMap<String, usize> = HashMap::new();
-    for (line, at) in lines.iter().filter_map(|l| Some((l, w.find.find(l)?))) {
-        let count = standing.entry(line.clone()).or_default();
+    let mut standing: HashMap<(String, u64), usize> = HashMap::new();
+    for (place, line) in lines {
+        let Some(at) = w.find.find(line) else { continue };
+        let key = (line.clone(), *place);
+        let count = standing.entry(key.clone()).or_default();
         *count += 1;
-        if *count > w.seen.get(line).copied().unwrap_or_default() {
+        if *count > w.seen.get(&key).copied().unwrap_or_default() {
             let (told, cut) = excerpt(line, at);
             w.pending_bytes += told.len();
-            w.pending.push_back((told, fresh, cut));
+            w.pending.push_back((told, fresh, cut, *place));
         }
     }
     w.seen = standing;
@@ -303,11 +308,11 @@ fn tell(watches: &mut [Watch], turn: usize, budget: &mut Budget) -> Vec<Value> {
         let mut told = false;
         for k in 0..count {
             let w = &mut watches[(turn + k) % count];
-            let Some((line, fresh, cut)) = w.pending.front() else { continue };
+            let Some((line, fresh, cut, place)) = w.pending.front() else { continue };
             if !budget.take(w.id.len() + line.len() + 128) {
                 return events;
             }
-            let mut data = json!({"watch": w.id, "line": line, "fresh": fresh});
+            let mut data = json!({"watch": w.id, "line": line, "fresh": fresh, "pos": place});
             if *cut {
                 data["cut"] = true.into();
             }
@@ -361,8 +366,12 @@ mod tests {
         compile(&[watch(OutputMatch::Substring("FAIL".into()), 40)], |_| Ok(1), |_| false).unwrap().remove(0)
     }
 
-    fn lines(rows: &[&str]) -> Vec<String> {
-        rows.iter().map(|r| r.to_string()).collect()
+    fn lines(rows: &[&str]) -> Vec<(u64, String)> {
+        rows.iter().enumerate().map(|(i, r)| (i as u64, r.to_string())).collect()
+    }
+
+    fn at(rows: Vec<String>) -> Vec<(u64, String)> {
+        rows.into_iter().enumerate().map(|(i, line)| (i as u64, line)).collect()
     }
 
     fn told(events: &[Value]) -> Vec<(Value, Value)> {
@@ -375,10 +384,10 @@ mod tests {
         observe(&mut w[0], &lines(&["a FAIL", "ok", "b FAIL", "a FAIL"]));
         let first = tell(&mut w, 0, &mut Budget { events: 2, bytes: 1 << 20 });
         assert_eq!(told(&first), [(json!("a FAIL"), json!(true)), (json!("b FAIL"), json!(true))], "in their order");
-        observe(&mut w[0], &lines(&["a FAIL", "b FAIL", "a FAIL", "c FAIL"]));
+        observe(&mut w[0], &lines(&["a FAIL", "ok", "b FAIL", "a FAIL", "c FAIL"]));
         let next = tell(&mut w, 1, &mut Budget { events: 9, bytes: 1 << 20 });
         assert_eq!(told(&next), [(json!("a FAIL"), json!(true)), (json!("c FAIL"), json!(false))]);
-        observe(&mut w[0], &lines(&["a FAIL", "b FAIL", "a FAIL", "c FAIL"]));
+        observe(&mut w[0], &lines(&["a FAIL", "ok", "b FAIL", "a FAIL", "c FAIL"]));
         assert!(
             tell(&mut w, 2, &mut Budget { events: 9, bytes: 1 << 20 }).is_empty(),
             "standing rows are not told again"
@@ -386,10 +395,25 @@ mod tests {
     }
 
     #[test]
+    fn the_same_text_at_another_place_is_another_row() {
+        let mut w = [fail_watch()];
+        observe(&mut w[0], &[(10, "FAIL x".to_string())]);
+        assert_eq!(told(&tell(&mut w, 0, &mut Budget { events: 9, bytes: 1 << 20 })), [(json!("FAIL x"), json!(true))]);
+        observe(&mut w[0], &[(11, "FAIL x".to_string())]);
+        assert_eq!(
+            told(&tell(&mut w, 0, &mut Budget { events: 9, bytes: 1 << 20 })),
+            [(json!("FAIL x"), json!(false))],
+            "a row at a new place is a new row"
+        );
+        let events = tell(&mut w, 0, &mut Budget { events: 9, bytes: 1 << 20 });
+        assert!(events.is_empty(), "the same place is not told again");
+    }
+
+    #[test]
     fn a_busy_watch_leaves_room_for_a_quiet_one() {
         let mut ws = [fail_watch(), fail_watch()];
         let busy: Vec<String> = (0..200).map(|n| format!("{n} FAIL")).collect();
-        observe(&mut ws[0], &busy);
+        observe(&mut ws[0], &at(busy));
         observe(&mut ws[1], &lines(&["server FAIL"]));
         let events = tell(&mut ws, 0, &mut Budget { events: 3, bytes: 1 << 20 });
         assert!(told(&events).contains(&(json!("server FAIL"), json!(true))), "{events:?}");
@@ -399,7 +423,7 @@ mod tests {
     fn rows_left_waiting_past_what_a_watch_keeps_go_and_the_next_row_says_so() {
         let mut w = [fail_watch()];
         let flood: Vec<String> = (0..MAX_PENDING + 5).map(|n| format!("{n} FAIL")).collect();
-        observe(&mut w[0], &flood);
+        observe(&mut w[0], &at(flood));
         assert!(tell(&mut w, 0, &mut Budget { events: 0, bytes: 1 << 20 }).is_empty());
         trim(&mut w[0]);
         let events = tell(&mut w, 0, &mut Budget { events: 2, bytes: 1 << 20 });
@@ -465,7 +489,7 @@ mod tests {
         let mut w = [fail_watch()];
         let burst: Vec<String> = (0..180).map(|n| format!("{n:03} FAIL {}", "x".repeat(380))).collect();
         assert!(burst.iter().map(String::len).sum::<usize>() > MAX_PENDING_BYTES);
-        observe(&mut w[0], &burst);
+        observe(&mut w[0], &at(burst));
         let events = tell(&mut w, 0, &mut Budget { events: EVENTS_PER_LOOK, bytes: BYTES_PER_LOOK });
         trim(&mut w[0]);
         assert_eq!(events.len(), 180);
@@ -477,7 +501,7 @@ mod tests {
         let mut ws: Vec<Watch> = (0..4).map(|_| fail_watch()).collect();
         for w in &mut ws {
             let flood: Vec<String> = (0..MAX_PENDING + 1).map(|n| format!("{n} FAIL")).collect();
-            observe(w, &flood);
+            observe(w, &at(flood));
             trim(w);
         }
         let events = tell(&mut ws, 0, &mut Budget { events: 4, bytes: 1 << 20 });
