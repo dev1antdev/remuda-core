@@ -392,6 +392,10 @@ pub struct ReadParams {
     #[arg(long, value_enum, default_value_t)]
     #[serde(default)]
     pub format: crate::styled::ReadFormat,
+    /// Join the rows a program soft-wrapped into one, as a find reads them (API only).
+    #[arg(skip)]
+    #[serde(default)]
+    pub join: bool,
 }
 
 #[derive(Serialize, JsonSchema)]

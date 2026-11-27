@@ -26,7 +26,7 @@ const MAX_ROWS: usize = 5_000;
 /// The live screen with up to `lines` of history above it (main screen only, the newest rows whose
 /// JSON fits the budget and at most `MAX_ROWS` of them), with colors. None for a finished terminal:
 /// what it keeps has none.
-pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, RpcError>> {
+pub fn read(core: &Core, id: u32, lines: usize, join: bool) -> Option<Result<ReadResult, RpcError>> {
     // The screen is taken under the lock and encoded after it: encoding walks every cell, and a second
     // terminal's typing must not wait behind a deep read. The snapshot is the one call that sees the
     // screen as it stands.
@@ -37,11 +37,14 @@ pub fn read(core: &Core, id: u32, lines: usize) -> Option<Result<ReadResult, Rpc
     };
     let screen = core.restored(&bytes)?;
     let full_screen = screen.alt_screen();
-    let history = screen.styled_history();
+    // A find reads logical rows: the rows a program soft-wrapped are one, so a word broken at the edge is found.
+    let screen_rows = if join { screen.styled_screen_joined() } else { screen.styled_screen() };
+    let history: Vec<String> =
+        if join { screen.styled_history_joined().collect() } else { screen.styled_history().collect() };
     // Asked for more rows than the bound while there were more than that to give: the rest is unread.
     let capped = lines.min(history.len()) > MAX_ROWS;
     let wanted = lines.min(MAX_ROWS);
-    let Some((rows, kept, budget_cut)) = fit(screen.styled_screen(), history.take(wanted), BUDGET) else {
+    let Some((rows, kept, budget_cut)) = fit(screen_rows, history.into_iter().take(wanted), BUDGET) else {
         let hint = "read it as plain text (no format)";
         return Some(Err(RpcError::new("unavailable", "its screen is too large to read with colors", hint)));
     };
