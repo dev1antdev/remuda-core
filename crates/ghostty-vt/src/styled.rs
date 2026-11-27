@@ -73,11 +73,12 @@ impl Terminal {
         let mut out: Vec<String> = Vec::new();
         for y in 0..rows as u32 {
             let row = self.styled_row(ffi::POINT_ACTIVE, y, cols);
-            if y > 0 && self.continues_previous(ffi::POINT_ACTIVE, y) {
-                if let Some(last) = out.last_mut() {
-                    last.push_str(&row);
-                    continue;
-                }
+            if y > 0
+                && self.continues_previous(ffi::POINT_ACTIVE, y)
+                && let Some(last) = out.last_mut()
+            {
+                last.push_str(&row);
+                continue;
             }
             out.push(row);
         }
@@ -92,11 +93,12 @@ impl Terminal {
         let mut out: Vec<String> = Vec::new();
         for y in 0..available {
             let row = self.styled_row(ffi::POINT_HISTORY, y, cols);
-            if y > 0 && self.continues_previous(ffi::POINT_HISTORY, y) {
-                if let Some(last) = out.last_mut() {
-                    last.push_str(&row);
-                    continue;
-                }
+            if y > 0
+                && self.continues_previous(ffi::POINT_HISTORY, y)
+                && let Some(last) = out.last_mut()
+            {
+                last.push_str(&row);
+                continue;
             }
             out.push(row);
         }
