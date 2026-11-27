@@ -55,6 +55,7 @@ pub(super) async fn terminal_run(core: Ctx<'_>, mut p: RunParams) -> Result<RunR
                 caller: None,
                 lines: if full_screen { 0 } else { FINISHED_LINES },
                 format: Default::default(),
+                join: false,
             };
             let text = tail(terminal_read(core, read).await.map(|r| r.text).unwrap_or_default(), id);
             has_seen(core, caller.as_deref(), id);

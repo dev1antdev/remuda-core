@@ -70,6 +70,13 @@ impl Terminal {
     /// SGR, nothing else; trailing blank cells without a style are left out.
     pub fn styled_screen(&self) -> Vec<String> {
         let (cols, rows) = self.size();
+        (0..rows as u32).map(|y| self.styled_row(ffi::POINT_ACTIVE, y, cols)).collect()
+    }
+
+    /// `styled_screen` with a row that continues the wrap above it joined to that row: the logical rows a find
+    /// reads, not the physical ones a viewer paints.
+    pub fn styled_screen_joined(&self) -> Vec<String> {
+        let (cols, rows) = self.size();
         let mut out: Vec<String> = Vec::new();
         for y in 0..rows as u32 {
             let row = self.styled_row(ffi::POINT_ACTIVE, y, cols);
@@ -88,6 +95,13 @@ impl Terminal {
     /// Scrollback rows like `styled_screen`'s, the newest first, read as taken
     /// (main screen only: none on the alternate screen).
     pub fn styled_history(&self) -> impl ExactSizeIterator<Item = String> + '_ {
+        let cols = self.size().0;
+        let available = if self.alt_screen() { 0 } else { self.history_rows() };
+        (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
+    }
+
+    /// `styled_history` with a row that continues the wrap above it joined to that row, newest first.
+    pub fn styled_history_joined(&self) -> impl ExactSizeIterator<Item = String> + '_ {
         let cols = self.size().0;
         let available = if self.alt_screen() { 0 } else { self.history_rows() };
         let mut out: Vec<String> = Vec::new();
@@ -343,12 +357,12 @@ mod tests {
     fn a_styled_read_joins_a_wrapped_word_on_the_screen_and_in_history() {
         let mut t = Terminal::new(10, 4, 1 << 20);
         t.write(b"abcdefghijklmnopqrstuvwxyz\r\n");
-        let screen: Vec<String> = t.styled_screen().iter().map(|r| plain(r)).collect();
+        let screen: Vec<String> = t.styled_screen_joined().iter().map(|r| plain(r)).collect();
         assert!(screen.iter().any(|r| r == "abcdefghijklmnopqrstuvwxyz"), "{screen:?}");
         for n in 1..=10 {
             t.write(format!("{n}\r\n").as_bytes());
         }
-        let history: Vec<String> = t.styled_history().map(|r| plain(&r)).collect();
+        let history: Vec<String> = t.styled_history_joined().map(|r| plain(&r)).collect();
         assert!(history.iter().any(|r| r == "abcdefghijklmnopqrstuvwxyz"), "{history:?}");
     }
 
@@ -373,9 +387,9 @@ mod tests {
     fn history_comes_newest_first_on_the_main_screen_only() {
         let mut t = Terminal::new(20, 2, 1 << 20);
         t.write(b"\x1b[32mone\r\ntwo\r\nthree\r\nfour");
-        let history: Vec<String> = t.styled_history().map(|r| plain(&r)).collect();
+        let history: Vec<String> = t.styled_history_joined().map(|r| plain(&r)).collect();
         assert_eq!(history, ["two", "one"]);
-        let screen: Vec<String> = t.styled_screen().iter().map(|r| plain(r)).collect();
+        let screen: Vec<String> = t.styled_screen_joined().iter().map(|r| plain(r)).collect();
         assert_eq!(screen, ["three", "four"]);
         t.write(b"\x1b[?1049h\x1b[Hfull");
         assert_eq!(t.styled_history().count(), 0, "a full-screen program has no history here");

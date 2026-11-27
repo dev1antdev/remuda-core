@@ -2500,6 +2500,16 @@
           }
         },
         {
+          "description": "Join the rows a program soft-wrapped into one, as a find reads them (API only).",
+          "name": "join",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "Join the rows a program soft-wrapped into one, as a find reads them (API only).",
+            "type": "boolean"
+          }
+        },
+        {
           "description": "Lines of history above the screen.",
           "name": "lines",
           "required": false,

@@ -391,7 +391,7 @@ async fn terminal_read(core: Ctx<'_>, p: ReadParams) -> Result<ReadResult, RpcEr
     let owned = Arc::clone(core.core);
     let (lines, vt) = (p.lines, p.format == crate::styled::ReadFormat::Vt);
     if vt {
-        let vread = blocking(move || Ok(crate::styled::read(&owned, id, lines))).await?;
+        let vread = blocking(move || Ok(crate::styled::read(&owned, id, lines, p.join))).await?;
         if let Some(result) = vread {
             core.flush_saved().await?;
             return result;
