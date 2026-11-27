@@ -1681,7 +1681,7 @@
       "name": "Apache-2.0"
     },
     "title": "remuda-core",
-    "version": "0.2.5"
+    "version": "0.2.6"
   },
   "methods": [
     {
@@ -2497,6 +2497,16 @@
             "$ref": "#/components/schemas/ReadFormat",
             "default": "plain",
             "description": "plain, or vt: rows with their colors as SGR (a live terminal; a finished\none, and an older core, answer plain text)."
+          }
+        },
+        {
+          "description": "Join the rows a program soft-wrapped into one, as a find reads them (API only).",
+          "name": "join",
+          "required": false,
+          "schema": {
+            "default": false,
+            "description": "Join the rows a program soft-wrapped into one, as a find reads them (API only).",
+            "type": "boolean"
           }
         },
         {
