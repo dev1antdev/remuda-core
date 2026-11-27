@@ -56,6 +56,16 @@ impl Terminal {
         false
     }
 
+    /// Whether row `y` continues the soft wrap of row `y - 1` and may be joined to it in a read: the flags, the
+    /// text and no wide character standing on the break.
+    pub(crate) fn continues_previous(&self, tag: i32, y: u32) -> bool {
+        y > 0
+            && self.wraps(tag, y - 1)
+            && self.continues(tag, y)
+            && self.holds_text(tag, y)
+            && !self.ends_on_a_spacer_head(tag, y - 1)
+    }
+
     /// Whether the rows from..=to may be painted with their soft wraps joined. The break after a wrapped row is
     /// left to the wrap, so the row below has to carry it: its own continuation flag, its text — a row inserted
     /// under a wrap keeps the flag above it and loses its own, and a blank row writes no cells, so the one break

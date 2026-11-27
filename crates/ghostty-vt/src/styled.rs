@@ -70,7 +70,18 @@ impl Terminal {
     /// SGR, nothing else; trailing blank cells without a style are left out.
     pub fn styled_screen(&self) -> Vec<String> {
         let (cols, rows) = self.size();
-        (0..rows as u32).map(|y| self.styled_row(ffi::POINT_ACTIVE, y, cols)).collect()
+        let mut out: Vec<String> = Vec::new();
+        for y in 0..rows as u32 {
+            let row = self.styled_row(ffi::POINT_ACTIVE, y, cols);
+            if y > 0 && self.continues_previous(ffi::POINT_ACTIVE, y) {
+                if let Some(last) = out.last_mut() {
+                    last.push_str(&row);
+                    continue;
+                }
+            }
+            out.push(row);
+        }
+        out
     }
 
     /// Scrollback rows like `styled_screen`'s, the newest first, read as taken
@@ -78,7 +89,19 @@ impl Terminal {
     pub fn styled_history(&self) -> impl ExactSizeIterator<Item = String> + '_ {
         let cols = self.size().0;
         let available = if self.alt_screen() { 0 } else { self.history_rows() };
-        (0..available).rev().map(move |y| self.styled_row(ffi::POINT_HISTORY, y, cols))
+        let mut out: Vec<String> = Vec::new();
+        for y in 0..available {
+            let row = self.styled_row(ffi::POINT_HISTORY, y, cols);
+            if y > 0 && self.continues_previous(ffi::POINT_HISTORY, y) {
+                if let Some(last) = out.last_mut() {
+                    last.push_str(&row);
+                    continue;
+                }
+            }
+            out.push(row);
+        }
+        out.reverse();
+        out.into_iter()
     }
 
     /// The primary screen a full-screen program hides, restored and left active, as `paint` replays it:
@@ -315,10 +338,33 @@ mod tests {
     }
 
     #[test]
+    fn a_styled_read_joins_a_wrapped_word_on_the_screen_and_in_history() {
+        let mut t = Terminal::new(10, 4, 1 << 20);
+        t.write(b"abcdefghijklmnopqrstuvwxyz\r\n");
+        let screen: Vec<String> = t.styled_screen().iter().map(|r| plain(r)).collect();
+        assert!(screen.iter().any(|r| r == "abcdefghijklmnopqrstuvwxyz"), "{screen:?}");
+        for n in 1..=10 {
+            t.write(format!("{n}\r\n").as_bytes());
+        }
+        let history: Vec<String> = t.styled_history().map(|r| plain(&r)).collect();
+        assert!(history.iter().any(|r| r == "abcdefghijklmnopqrstuvwxyz"), "{history:?}");
+    }
+
+    #[test]
     fn a_wrapped_line_is_one_recent_row() {
         let mut t = Terminal::new(10, 4, 1 << 20);
         t.write(b"first\r\nabcdefghijklmnopqrstuvwxyz");
         assert_eq!(t.recent_rows(4), ["first", "abcdefghijklmnopqrstuvwxyz"]);
+    }
+
+    #[test]
+    fn a_restored_snapshot_keeps_a_wrapped_lines_join() {
+        let mut t = Terminal::new(10, 4, 1 << 20);
+        t.write(b"first\r\nabcdefghijklmnopqrstuvwxyz\r\n");
+        let bytes = t.snapshot().expect("snapshot");
+        let r = Terminal::restore(&bytes, 1 << 20).expect("restore");
+        assert_eq!(r.recent_rows(9), ["first", "abcdefghijklmnopqrstuvwxyz"]);
+        assert!(r.plain_text().contains("abcdefghijklmnopqrstuvwxyz"), "plain: {:?}", r.plain_text());
     }
 
     #[test]

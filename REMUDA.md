@@ -275,6 +275,10 @@ AGENTS.md and CONTRIBUTING.md hold here too. Where this file says otherwise, thi
   `mod wrap;` and `paint_with` in `ghostty-vt/src/lib.rs`, and a sentence in `schema/README.md`'s attach
   paragraph, where a viewer applies a paint at the grid it set or was told. A core older than this on an
   added machine still paints a soft-wrapped row as two lines.
+- The styled read joins too: `styled_screen` and `styled_history` (ours, `ghostty-vt/src/styled.rs`) join a
+  row that continues the wrap above it (`continues_previous` in `wrap.rs`), so a find over `terminal.read
+  --format vt` crosses a word the program wrapped, on the screen and in the history — the adapter's
+  `PaneRecent` reads that format for the page's find over the scrollback.
 - `.github/workflows/ci.yml`: Windows tests on `windows-2022` (as our release builds Windows):
   `windows-2025`'s Visual Studio 18 refuses Zig 0.16's clang; go back once upstream's Zig builds there.
 - `crates/remuda-core/src/sweep.rs`'s tests: `members_settled` wants a process found on three reads
